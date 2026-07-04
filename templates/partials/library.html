@@ -1,0 +1,497 @@
+<style>
+  * { box-sizing:border-box; }
+  .page-inner { padding:28px 32px; max-width:1400px; margin:0 auto; }
+  .lib-toolbar { display:flex; gap:12px; margin-bottom:20px; align-items:center; flex-wrap:wrap; }
+  .lib-toolbar input { flex:1; min-width:200px; background:var(--surface); border:0.5px solid var(--border2); color:var(--text); border-radius:8px; padding:9px 14px; font-size:13px; outline:none; transition:border-color 0.2s; }
+  .lib-toolbar input:focus { border-color:var(--accent); }
+  .lib-count { font-size:12px; color:var(--muted); white-space:nowrap; }
+  .btn { padding:8px 16px; border-radius:8px; border:none; font-size:13px; font-weight:600; cursor:pointer; transition:opacity 0.15s; font-family:inherit; }
+  .btn:hover { opacity:0.85; }
+  .btn-outline { background:transparent; border:0.5px solid var(--border2); color:var(--muted); }
+  .btn-sm { padding:5px 12px; font-size:12px; }
+  .btn-danger { background:var(--error,#e03b3b); color:#fff; }
+  .type-toggle { display:flex; background:var(--surface2); border:0.5px solid var(--border2); border-radius:9px; padding:3px; gap:3px; }
+  .type-btn { padding:6px 18px; border-radius:7px; border:none; font-size:12px; font-weight:600; cursor:pointer; background:transparent; color:var(--muted); transition:all 0.15s; font-family:inherit; }
+  .type-btn.active { background:var(--accent-btn-bg,var(--accent)); color:#000; }
+  .lib-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:14px; }
+  .media-card { background:var(--surface); border:0.5px solid var(--border2); border-radius:var(--radius,10px); overflow:hidden; cursor:pointer; transition:border-color 0.2s,transform 0.15s; }
+  .media-card:hover { border-color:var(--accent); transform:translateY(-3px); }
+  .media-poster-wrap { position:relative; width:100%; aspect-ratio:2/3; overflow:hidden; background:var(--border2); }
+  .media-poster { width:100%; height:100%; object-fit:cover; display:block; transition:transform 0.3s; }
+  .media-card:hover .media-poster { transform:scale(1.04); }
+  .media-poster-ph { width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size:32px; }
+  .media-rating { position:absolute; top:7px; right:7px; background:rgba(0,0,0,0.75); color:var(--accent); font-size:10px; font-weight:700; padding:2px 6px; border-radius:5px; }
+  .media-type-badge { position:absolute; top:7px; left:7px; background:rgba(0,0,0,0.75); color:#fff; font-size:9px; font-weight:700; padding:2px 6px; border-radius:5px; text-transform:uppercase; }
+  .media-info { padding:9px 10px 5px; }
+  .media-title { font-size:12px; font-weight:600; line-height:1.3; margin-bottom:2px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; color:var(--text); }
+  .media-year { font-size:10px; color:var(--muted); margin-bottom:3px; }
+  .media-genres { font-size:10px; color:var(--muted2); overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .media-foot { padding:0 10px 10px; display:flex; gap:5px; }
+  .btn-watch-card { flex:1; padding:5px; border-radius:6px; border:0.5px solid rgba(59,212,122,0.35); background:rgba(59,212,122,0.08); color:#3bd47a; font-size:10px; font-weight:700; cursor:pointer; font-family:inherit; }
+  .btn-watch-card:hover { background:rgba(59,212,122,0.18); }
+  .btn-del-card { flex:1; padding:5px; border-radius:6px; border:0.5px solid rgba(224,59,59,0.35); background:rgba(224,59,59,0.08); color:var(--error,#e03b3b); font-size:10px; font-weight:700; cursor:pointer; font-family:inherit; }
+  .btn-del-card:hover { background:rgba(224,59,59,0.18); }
+  .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.85); display:flex; align-items:center; justify-content:center; z-index:200; opacity:0; pointer-events:none; transition:opacity 0.2s; padding:20px; }
+  .modal-overlay.show { opacity:1; pointer-events:all; }
+  .modal-box { background:var(--surface); border:0.5px solid var(--border2); border-radius:14px; max-width:860px; width:100%; max-height:90vh; overflow-y:auto; position:relative; }
+  .modal-backdrop { width:100%; height:220px; object-fit:cover; border-radius:14px 14px 0 0; display:block; }
+  .modal-backdrop-ph { width:100%; height:220px; background:linear-gradient(135deg,var(--border2),var(--bg)); border-radius:14px 14px 0 0; display:flex; align-items:center; justify-content:center; font-size:48px; }
+  .modal-close { position:absolute; top:12px; right:12px; background:rgba(0,0,0,0.6); border:none; color:var(--text); width:32px; height:32px; border-radius:50%; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center; z-index:2; }
+  .modal-body { padding:0 24px 24px; }
+  .modal-header { display:flex; gap:18px; margin-top:-52px; margin-bottom:18px; align-items:flex-end; }
+  .modal-poster { width:90px; height:134px; border-radius:9px; object-fit:cover; border:2px solid var(--border2); flex-shrink:0; }
+  .modal-poster-ph { width:90px; height:134px; border-radius:9px; background:var(--border2); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:26px; border:2px solid var(--border2); }
+  .modal-title { font-size:20px; font-weight:700; margin-bottom:5px; color:var(--text); }
+  .modal-tagline { font-size:12px; color:var(--muted); font-style:italic; margin-bottom:7px; }
+  .modal-pills { display:flex; gap:6px; flex-wrap:wrap; }
+  .mpill { display:inline-block; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; }
+  .mp-year { background:rgba(240,151,30,0.15); color:var(--accent); }
+  .mp-rating { background:rgba(59,212,122,0.15); color:#3bd47a; }
+  .mp-runtime { background:rgba(90,90,122,0.15); color:var(--muted); }
+  .mp-lang { background:rgba(91,141,238,0.15); color:#5b8dee; }
+  .modal-overview { font-size:13px; line-height:1.7; margin-bottom:18px; color:var(--text); }
+  .modal-sec { margin-bottom:16px; }
+  .modal-sec-title { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:8px; }
+  .genre-tags { display:flex; flex-wrap:wrap; gap:6px; }
+  .genre-tag { padding:3px 10px; border-radius:20px; font-size:11px; background:var(--surface2); border:0.5px solid var(--border2); color:var(--text); }
+  .cast-row { display:flex; gap:10px; overflow-x:auto; padding-bottom:4px; }
+  .cast-card { flex-shrink:0; width:64px; text-align:center; }
+  .cast-photo { width:56px; height:56px; border-radius:50%; object-fit:cover; background:var(--border2); display:block; margin:0 auto 5px; }
+  .cast-photo-ph { width:56px; height:56px; border-radius:50%; background:var(--border2); display:flex; align-items:center; justify-content:center; font-size:20px; margin:0 auto 5px; }
+  .cast-name { font-size:10px; font-weight:600; line-height:1.2; color:var(--text); }
+  .cast-char { font-size:9px; color:var(--muted); }
+  .modal-foot { display:flex; gap:10px; padding-top:14px; border-top:0.5px solid var(--border); flex-wrap:wrap; }
+  .btn-modal-watch { padding:9px 18px; border-radius:8px; border:0.5px solid #3bd47a; background:rgba(59,212,122,0.1); color:#3bd47a; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; }
+  .btn-modal-del { padding:9px 18px; border-radius:8px; border:0.5px solid var(--error,#e03b3b); background:rgba(224,59,59,0.1); color:var(--error,#e03b3b); font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; }
+  .btn-tmdb { display:inline-flex; align-items:center; padding:9px 18px; border-radius:8px; border:0.5px solid var(--border2); color:var(--muted); font-size:13px; text-decoration:none; }
+  .seasons-list { display:flex; flex-direction:column; gap:10px; }
+  .season-item { background:var(--surface2); border:0.5px solid var(--border2); border-radius:10px; overflow:hidden; }
+  .season-header { display:flex; align-items:center; gap:12px; padding:12px 16px; cursor:pointer; transition:background 0.15s; }
+  .season-header:hover { background:rgba(255,255,255,0.03); }
+  .season-thumb { width:40px; height:56px; border-radius:6px; object-fit:cover; background:var(--border2); flex-shrink:0; }
+  .season-thumb-ph { width:40px; height:56px; border-radius:6px; background:var(--border2); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:16px; }
+  .season-info { flex:1; min-width:0; }
+  .season-name { font-size:13px; font-weight:600; color:var(--text); }
+  .season-meta { font-size:11px; color:var(--muted); margin-top:2px; }
+  .season-chevron { color:var(--muted); font-size:12px; transition:transform 0.2s; flex-shrink:0; }
+  .season-chevron.open { transform:rotate(180deg); }
+  .season-del-btn { background:rgba(224,59,59,0.1); border:0.5px solid rgba(224,59,59,0.35); color:var(--error,#e03b3b); border-radius:6px; padding:4px 10px; font-size:11px; font-weight:700; cursor:pointer; flex-shrink:0; font-family:inherit; }
+  .episodes-list { border-top:0.5px solid var(--border); display:none; }
+  .episodes-list.open { display:block; }
+  .episode-item { display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:0.5px solid var(--border); }
+  .episode-item:last-child { border-bottom:none; }
+  .ep-thumb { width:80px; height:45px; border-radius:6px; object-fit:cover; background:var(--border2); flex-shrink:0; }
+  .ep-thumb-ph { width:80px; height:45px; border-radius:6px; background:var(--border2); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:18px; }
+  .ep-num { font-size:11px; font-weight:700; color:var(--accent); flex-shrink:0; width:28px; }
+  .ep-info { flex:1; min-width:0; }
+  .ep-title { font-size:13px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ep-meta { font-size:11px; color:var(--muted); margin-top:2px; }
+  .ep-overview { font-size:11px; color:var(--muted); margin-top:3px; line-height:1.4; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .ep-actions { display:flex; gap:6px; flex-shrink:0; }
+  .ep-watch-btn { padding:5px 12px; border-radius:6px; border:0.5px solid rgba(59,212,122,0.4); background:rgba(59,212,122,0.08); color:#3bd47a; font-size:11px; font-weight:700; cursor:pointer; font-family:inherit; }
+  .ep-del-btn { padding:5px 10px; border-radius:6px; border:0.5px solid rgba(224,59,59,0.35); background:rgba(224,59,59,0.08); color:var(--error,#e03b3b); font-size:11px; font-weight:700; cursor:pointer; font-family:inherit; }
+  .confirm-wrap { background:var(--surface); border:0.5px solid var(--border2); border-radius:14px; padding:24px; width:400px; }
+  .confirm-wrap h3 { font-size:15px; font-weight:600; margin-bottom:8px; color:var(--text); }
+  .confirm-wrap p { font-size:13px; color:var(--muted); margin-bottom:14px; }
+  .confirm-check { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted); margin-bottom:16px; cursor:pointer; }
+  .confirm-actions { display:flex; gap:8px; justify-content:flex-end; }
+  .empty-state { padding:48px 20px; text-align:center; color:var(--muted); }
+  .empty-icon { font-size:32px; margin-bottom:10px; }
+  .empty-label { font-size:13px; }
+  .spin { display:inline-block; width:14px; height:14px; border:2px solid var(--border2); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; vertical-align:middle; margin-right:5px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+</style>
+
+<div class="page-inner">
+  <div class="lib-toolbar">
+    <div class="type-toggle">
+      <button class="type-btn active" id="btnMovies" onclick="switchType('movies')">🎬 Movies</button>
+      <button class="type-btn" id="btnShows" onclick="switchType('shows')">📺 Shows</button>
+    </div>
+    <input type="text" id="libSearch" placeholder="Search library…" oninput="filterLib()" />
+    <span class="lib-count" id="libCount"></span>
+    <button class="btn btn-outline btn-sm" onclick="loadLib()">↻ Refresh</button>
+  </div>
+  <div id="libGrid" class="lib-grid">
+    <div class="empty-state" style="grid-column:1/-1"><span class="spin"></span> Loading…</div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="movieModal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeLibModal('movieModal')">✕</button>
+    <div id="movieModalContent"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="showModal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeLibModal('showModal')">✕</button>
+    <div id="showModalContent"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="libDeleteModal">
+  <div class="confirm-wrap">
+    <h3 id="libDeleteTitle">Delete</h3>
+    <p id="libDeleteMsg"></p>
+    <label class="confirm-check" id="libSeerrRow">
+      <input type="checkbox" id="libDeleteSeerr" checked> Also clear Jellyseerr request
+    </label>
+    <div class="confirm-actions">
+      <button class="btn btn-outline btn-sm" onclick="closeLibModal('libDeleteModal')">Cancel</button>
+      <button class="btn btn-danger btn-sm" onclick="libConfirmDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var _LIB_TMDB = 'https://image.tmdb.org/t/p/';
+var libMovies = [], libShows = [], libType = 'movies';
+var libPendingDelete = null;
+var _libStore = {}, _libIdx = 0;
+var _jellyBase = '';
+
+window.init_library = loadLib;
+
+function closeLibModal(id) {
+  document.getElementById(id).classList.remove('show');
+}
+
+document.getElementById('movieModal').addEventListener('click', function(e) {
+  if (e.target === this) closeLibModal('movieModal');
+});
+document.getElementById('showModal').addEventListener('click', function(e) {
+  if (e.target === this) closeLibModal('showModal');
+});
+
+async function getJellyBase() {
+  if (_jellyBase) return _jellyBase;
+  try {
+    var d = await fetch('/api/status').then(function(r){return r.json();});
+    _jellyBase = (d.jellyfin_url || 'http://localhost:8096')
+      .replace('http://jellyfin:8096', 'http://localhost:8096')
+      .replace('http://jellyfin', 'http://localhost');
+  } catch(e) { _jellyBase = 'http://localhost:8096'; }
+  return _jellyBase;
+}
+
+async function loadLib() {
+  document.getElementById('libGrid').innerHTML =
+    '<div class="empty-state" style="grid-column:1/-1"><span class="spin"></span> Loading...</div>';
+  try {
+    var results = await Promise.all([
+      fetch('/api/library').then(function(r){return r.json();}),
+      fetch('/api/shows').then(function(r){return r.json();})
+    ]);
+    libMovies = Array.isArray(results[0]) ? results[0] : [];
+    libShows  = Array.isArray(results[1]) ? results[1] : [];
+    window.setLibBadge(libMovies.length + libShows.length);
+    switchType(libType);
+  } catch(e) {
+    document.getElementById('libGrid').innerHTML =
+      '<div class="empty-state" style="grid-column:1/-1"><div class="empty-icon">⚠️</div><div class="empty-label">Could not load library</div></div>';
+  }
+}
+
+function switchType(type) {
+  libType = type;
+  document.getElementById('btnMovies').classList.toggle('active', type === 'movies');
+  document.getElementById('btnShows').classList.toggle('active', type === 'shows');
+  document.getElementById('libSearch').value = '';
+  var arr = type === 'movies' ? libMovies : libShows;
+  document.getElementById('libCount').textContent =
+    arr.length + ' ' + (type === 'movies' ? 'movie' : 'show') + (arr.length !== 1 ? 's' : '');
+  renderLib(arr);
+}
+
+function filterLib() {
+  var q = document.getElementById('libSearch').value.toLowerCase().trim();
+  var arr = libType === 'movies' ? libMovies : libShows;
+  var f = q ? arr.filter(function(m){return m.title.toLowerCase().includes(q)||String(m.year||'').includes(q);}) : arr;
+  document.getElementById('libCount').textContent =
+    f.length + ' of ' + arr.length + ' ' + (libType === 'movies' ? 'movie' : 'show') + (arr.length !== 1 ? 's' : '');
+  renderLib(f);
+}
+
+function renderLib(items) {
+  var g = document.getElementById('libGrid');
+  var isShows = libType === 'shows';
+  if (!items.length) {
+    g.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="empty-icon">' +
+      (isShows ? '📺' : '🎞️') + '</div><div class="empty-label">No ' + libType + ' found</div></div>';
+    return;
+  }
+  var html = '';
+  var keys = [];
+  items.forEach(function(m) {
+    _libIdx++;
+    var key = 'lib_' + _libIdx;
+    _libStore[key] = m;
+    keys.push(key);
+    var src = m.tmdb_poster ? (_LIB_TMDB + 'w300' + m.tmdb_poster) : (m.poster || '');
+    var rating = m.rating ? ('⭐ ' + Number(m.rating).toFixed(1)) : '';
+    html += '<div class="media-card" data-key="' + key + '">';
+    html += '<div class="media-poster-wrap">';
+    if (src) html += '<img class="media-poster" src="' + esc(src) + '" alt="" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">';
+    html += '<div class="media-poster-ph"' + (src?' style="display:none"':'') + '>' + (isShows?'📺':'🎬') + '</div>';
+    if (rating) html += '<div class="media-rating">' + rating + '</div>';
+    if (isShows) html += '<div class="media-type-badge">TV</div>';
+    html += '</div>';
+    html += '<div class="media-info">';
+    html += '<div class="media-title">' + esc(m.title) + '</div>';
+    html += '<div class="media-year">' + esc(String(m.year||'')) + '</div>';
+    if (m.genres) html += '<div class="media-genres">' + esc(m.genres) + '</div>';
+    html += '</div>';
+    html += '<div class="media-foot">';
+    html += '<button class="btn-watch-card" data-key="' + key + '">▶ Watch</button>';
+    html += '<button class="btn-del-card" data-key="' + key + '">🗑</button>';
+    html += '</div></div>';
+  });
+  g.innerHTML = html;
+
+  g.querySelectorAll('.media-card').forEach(function(card) {
+    card.addEventListener('click', function(e) {
+      if (e.target.tagName === 'BUTTON') return;
+      var m = _libStore[this.dataset.key];
+      if (isShows) openShowDetail(m); else openMovieDetail(m);
+    });
+  });
+  g.querySelectorAll('.btn-watch-card').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var m = _libStore[this.dataset.key];
+      if (isShows) watchShow(m.id); else watchMovie(m.id);
+    });
+  });
+  g.querySelectorAll('.btn-del-card').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var m = _libStore[this.dataset.key];
+      openLibDelete({id:m.id, title:m.title, year:m.year, tmdb_id:m.tmdb_id, folder:m.folder||'', type:isShows?'show':'movie'});
+    });
+  });
+}
+
+async function watchMovie(id) { var b=await getJellyBase(); window.open(b+'/web/index.html#!/details?id='+id,'_blank'); }
+async function watchShow(id)  { var b=await getJellyBase(); window.open(b+'/web/index.html#!/details?id='+id,'_blank'); }
+async function watchEpisode(id){ var b=await getJellyBase(); window.open(b+'/web/index.html#!/details?id='+id,'_blank'); }
+
+function buildModalHeader(bdUrl, pUrl, isShow, title, tagline, year, rating, extra1, extra2, language) {
+  var html = bdUrl
+    ? '<img class="modal-backdrop" src="'+esc(bdUrl)+'" alt="" onerror="this.style.display=\'none\'">'
+    : '<div class="modal-backdrop-ph">'+(isShow?'📺':'🎬')+'</div>';
+  html += '<div class="modal-body"><div class="modal-header">';
+  html += pUrl ? '<img class="modal-poster" src="'+esc(pUrl)+'" alt="">' : '<div class="modal-poster-ph">'+(isShow?'📺':'🎬')+'</div>';
+  html += '<div style="flex:1;min-width:0;padding-bottom:4px">';
+  html += '<div class="modal-title">'+esc(title)+'</div>';
+  if (tagline) html += '<div class="modal-tagline">'+esc(tagline)+'</div>';
+  html += '<div class="modal-pills">';
+  if (year)    html += '<span class="mpill mp-year">'+esc(year)+'</span>';
+  if (rating)  html += '<span class="mpill mp-rating">⭐ '+esc(rating)+'</span>';
+  if (extra1)  html += '<span class="mpill mp-runtime">'+esc(extra1)+'</span>';
+  if (extra2)  html += '<span class="mpill mp-runtime">'+esc(extra2)+'</span>';
+  if (language)html += '<span class="mpill mp-lang">'+esc(language)+'</span>';
+  html += '</div></div></div>';
+  return html;
+}
+
+async function openMovieDetail(m) {
+  var ov = document.getElementById('movieModal');
+  var ct = document.getElementById('movieModalContent');
+  ov.classList.add('show');
+  ct.innerHTML = '<div style="padding:80px;text-align:center"><span class="spin"></span> Loading...</div>';
+  var tmdb = null;
+  if (m.tmdb_id) {
+    try {
+      var key = await getTmdbKey();
+      if (key) { var r = await fetch('https://api.themoviedb.org/3/movie/'+m.tmdb_id+'?api_key='+key+'&append_to_response=credits'); if(r.ok) tmdb=await r.json(); }
+    } catch(e){}
+  }
+  var title    = (tmdb&&tmdb.title)||m.title;
+  var year     = (tmdb&&tmdb.release_date&&tmdb.release_date.slice(0,4))||String(m.year||'');
+  var overview = (tmdb&&tmdb.overview)||m.overview||'';
+  var tagline  = (tmdb&&tmdb.tagline)||'';
+  var rating   = (tmdb&&tmdb.vote_average)?Number(tmdb.vote_average).toFixed(1):'';
+  var runtime  = (tmdb&&tmdb.runtime)?(tmdb.runtime+' min'):'';
+  var language = (tmdb&&tmdb.original_language)?tmdb.original_language.toUpperCase():'';
+  var genres   = tmdb?(tmdb.genres||[]).map(function(g){return g.name;}):'';
+  var cast     = tmdb?((tmdb.credits&&tmdb.credits.cast)||[]).slice(0,12):[];
+  var bdUrl    = (tmdb&&tmdb.backdrop_path)?(_LIB_TMDB+'w1280'+tmdb.backdrop_path):'';
+  var pUrl     = (tmdb&&tmdb.poster_path)?(_LIB_TMDB+'w300'+tmdb.poster_path):(m.poster||'');
+
+  var html = buildModalHeader(bdUrl, pUrl, false, title, tagline, year, rating, runtime?('⏱ '+runtime):'', '', language);
+  if (overview) html += '<div class="modal-sec"><div class="modal-sec-title">Overview</div><div class="modal-overview">'+esc(overview)+'</div></div>';
+  if (genres&&genres.length) {
+    html += '<div class="modal-sec"><div class="modal-sec-title">Genres</div><div class="genre-tags">';
+    genres.forEach(function(g){html+='<span class="genre-tag">'+esc(g)+'</span>';});
+    html += '</div></div>';
+  }
+  if (cast.length) {
+    html += '<div class="modal-sec"><div class="modal-sec-title">Cast</div><div class="cast-row">';
+    cast.forEach(function(c){
+      html += '<div class="cast-card">';
+      html += c.profile_path ? '<img class="cast-photo" src="'+_LIB_TMDB+'w185'+c.profile_path+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">' : '<div class="cast-photo-ph">👤</div>';
+      html += '<div class="cast-name">'+esc(c.name)+'</div><div class="cast-char">'+esc(c.character||'')+'</div></div>';
+    });
+    html += '</div></div>';
+  }
+  html += '<div class="modal-foot">';
+  html += '<button class="btn-modal-watch" id="mvWatchBtn">▶ Watch in Jellyfin</button>';
+  html += '<button class="btn-modal-del" id="mvDelBtn">🗑 Delete from Jellyfin &amp; Disk</button>';
+  if (m.tmdb_id) html += '<a class="btn-tmdb" href="https://www.themoviedb.org/movie/'+m.tmdb_id+'" target="_blank">View on TMDB →</a>';
+  html += '</div></div>';
+  ct.innerHTML = html;
+
+  document.getElementById('mvWatchBtn').addEventListener('click', function(){watchMovie(m.id);});
+  document.getElementById('mvDelBtn').addEventListener('click', function(){
+    closeLibModal('movieModal');
+    openLibDelete({id:m.id, title:title, year:year, tmdb_id:m.tmdb_id, folder:m.folder||'', type:'movie'});
+  });
+}
+
+async function openShowDetail(m) {
+  var ov = document.getElementById('showModal');
+  var ct = document.getElementById('showModalContent');
+  ov.classList.add('show');
+  ct.innerHTML = '<div style="padding:80px;text-align:center"><span class="spin"></span> Loading...</div>';
+  var tmdb = null, seasons = [];
+  await Promise.all([
+    (async function(){
+      if (m.tmdb_id) {
+        try {
+          var key = await getTmdbKey();
+          if (key) { var r = await fetch('https://api.themoviedb.org/3/tv/'+m.tmdb_id+'?api_key='+key+'&append_to_response=credits'); if(r.ok) tmdb=await r.json(); }
+        } catch(e){}
+      }
+    })(),
+    (async function(){
+      try { seasons = await fetch('/api/shows/'+m.id+'/seasons').then(function(r){return r.json();}); } catch(e){}
+    })()
+  ]);
+
+  var title    = (tmdb&&tmdb.name)||m.title;
+  var year     = (tmdb&&tmdb.first_air_date&&tmdb.first_air_date.slice(0,4))||String(m.year||'');
+  var overview = (tmdb&&tmdb.overview)||m.overview||'';
+  var tagline  = (tmdb&&tmdb.tagline)||'';
+  var rating   = (tmdb&&tmdb.vote_average)?Number(tmdb.vote_average).toFixed(1):'';
+  var language = (tmdb&&tmdb.original_language)?tmdb.original_language.toUpperCase():'';
+  var genres   = tmdb?(tmdb.genres||[]).map(function(g){return g.name;}):'';
+  var cast     = tmdb?((tmdb.credits&&tmdb.credits.cast)||[]).slice(0,12):[];
+  var bdUrl    = (tmdb&&tmdb.backdrop_path)?(_LIB_TMDB+'w1280'+tmdb.backdrop_path):'';
+  var pUrl     = (tmdb&&tmdb.poster_path)?(_LIB_TMDB+'w300'+tmdb.poster_path):(m.poster||'');
+
+  var html = buildModalHeader(bdUrl, pUrl, true, title, tagline, year, rating, '📺 TV Series', '', language);
+  if (overview) html += '<div class="modal-sec"><div class="modal-sec-title">Overview</div><div class="modal-overview">'+esc(overview)+'</div></div>';
+  if (genres&&genres.length) {
+    html += '<div class="modal-sec"><div class="modal-sec-title">Genres</div><div class="genre-tags">';
+    genres.forEach(function(g){html+='<span class="genre-tag">'+esc(g)+'</span>';});
+    html += '</div></div>';
+  }
+  if (cast.length) {
+    html += '<div class="modal-sec"><div class="modal-sec-title">Cast</div><div class="cast-row">';
+    cast.forEach(function(c){
+      html += '<div class="cast-card">';
+      html += c.profile_path ? '<img class="cast-photo" src="'+_LIB_TMDB+'w185'+c.profile_path+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">' : '<div class="cast-photo-ph">👤</div>';
+      html += '<div class="cast-name">'+esc(c.name)+'</div><div class="cast-char">'+esc(c.character||'')+'</div></div>';
+    });
+    html += '</div></div>';
+  }
+  html += '<div class="modal-sec"><div class="modal-sec-title">Seasons &amp; Episodes</div><div class="seasons-list" id="seasonsList">';
+  if (seasons&&seasons.length) {
+    seasons.forEach(function(s){
+      html += '<div class="season-item">';
+      html += '<div class="season-header" data-showid="'+esc(m.id)+'" data-seasonid="'+esc(s.id)+'">';
+      html += s.poster ? '<img class="season-thumb" src="'+esc(s.poster)+'" alt="" onerror="this.style.display=\'none\';this.insertAdjacentHTML(\'afterend\',\'<div class=season-thumb-ph>📺</div>\')">' : '<div class="season-thumb-ph">📺</div>';
+      html += '<div class="season-info"><div class="season-name">'+esc(s.name)+'</div><div class="season-meta">'+(s.episode_count||0)+' episodes</div></div>';
+      html += '<button class="season-del-btn" data-sid="'+esc(s.id)+'" data-sname="'+esc(s.name)+'" data-stitle="'+esc(title)+'" data-syear="'+esc(year)+'">🗑 Delete</button>';
+      html += '<span class="season-chevron">▼</span></div>';
+      html += '<div class="episodes-list" id="eps-'+esc(s.id)+'"></div></div>';
+    });
+  } else {
+    html += '<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-label">No seasons found</div></div>';
+  }
+  html += '</div></div>';
+  html += '<div class="modal-foot">';
+  html += '<button class="btn-modal-watch" id="shWatchBtn">▶ Watch in Jellyfin</button>';
+  html += '<button class="btn-modal-del" id="shDelBtn">🗑 Delete entire show</button>';
+  if (m.tmdb_id) html += '<a class="btn-tmdb" href="https://www.themoviedb.org/tv/'+m.tmdb_id+'" target="_blank">View on TMDB →</a>';
+  html += '</div></div>';
+  ct.innerHTML = html;
+
+  document.getElementById('shWatchBtn').addEventListener('click', function(){watchShow(m.id);});
+  document.getElementById('shDelBtn').addEventListener('click', function(){
+    closeLibModal('showModal');
+    openLibDelete({id:m.id, title:title, year:year, type:'show'});
+  });
+  document.querySelectorAll('.season-header').forEach(function(hdr){
+    hdr.addEventListener('click', function(){toggleSeason(this.dataset.showid, this.dataset.seasonid, this);});
+  });
+  document.querySelectorAll('.season-del-btn').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      openLibDelete({id:this.dataset.sid, title:this.dataset.stitle+' - '+this.dataset.sname, year:this.dataset.syear, type:'season'});
+    });
+  });
+}
+
+async function toggleSeason(showId, seasonId, hdr) {
+  var epsEl = document.getElementById('eps-'+seasonId);
+  var chev  = hdr.querySelector('.season-chevron');
+  if (epsEl.classList.contains('open')) { epsEl.classList.remove('open'); chev.classList.remove('open'); return; }
+  epsEl.classList.add('open'); chev.classList.add('open');
+  if (epsEl.dataset.loaded) return;
+  epsEl.dataset.loaded = '1';
+  epsEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)"><span class="spin"></span> Loading...</div>';
+  try {
+    var eps = await fetch('/api/shows/'+showId+'/seasons/'+seasonId+'/episodes').then(function(r){return r.json();});
+    if (!eps.length) { epsEl.innerHTML='<div style="padding:16px;text-align:center;color:var(--muted);font-size:13px;">No episodes found</div>'; return; }
+    var html = '';
+    eps.forEach(function(e){
+      var epNum = String(e.index||0).padStart(2,'0');
+      html += '<div class="episode-item">';
+      html += '<div class="ep-num">E'+epNum+'</div>';
+      if (e.thumb) html += '<img class="ep-thumb" src="'+esc(e.thumb)+'" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">';
+      html += '<div class="ep-thumb-ph"'+(e.thumb?' style="display:none"':'')+'>▶</div>';
+      html += '<div class="ep-info"><div class="ep-title">'+esc(e.name)+'</div>';
+      html += '<div class="ep-meta">'+(e.runtime?e.runtime+' min':'')+'</div>';
+      if (e.overview) html += '<div class="ep-overview">'+esc(e.overview)+'</div>';
+      html += '</div><div class="ep-actions">';
+      html += '<button class="ep-watch-btn" data-epid="'+esc(e.id)+'">▶ Watch</button>';
+      html += '<button class="ep-del-btn" data-epid="'+esc(e.id)+'" data-eptitle="E'+epNum+' - '+esc(e.name)+'">🗑</button>';
+      html += '</div></div>';
+    });
+    epsEl.innerHTML = html;
+    epsEl.querySelectorAll('.ep-watch-btn').forEach(function(b){b.addEventListener('click',function(){watchEpisode(this.dataset.epid);});});
+    epsEl.querySelectorAll('.ep-del-btn').forEach(function(b){b.addEventListener('click',function(){openLibDelete({id:this.dataset.epid,title:this.dataset.eptitle,year:'',type:'episode'});});});
+  } catch(err) {
+    epsEl.innerHTML='<div style="padding:16px;text-align:center;color:var(--error,#e03b3b);font-size:13px;">Failed to load episodes</div>';
+  }
+}
+
+function openLibDelete(item) {
+  libPendingDelete = item;
+  document.getElementById('libDeleteTitle').textContent = 'Delete '+item.type;
+  document.getElementById('libDeleteMsg').textContent = 'Delete "'+item.title+'"'+(item.year?' ('+item.year+')':'')+' from Jellyfin and disk? This cannot be undone.';
+  document.getElementById('libSeerrRow').style.display = item.type==='movie'?'flex':'none';
+  document.getElementById('libDeleteModal').classList.add('show');
+}
+
+async function libConfirmDelete() {
+  if (!libPendingDelete) return;
+  var item = libPendingDelete;
+  var deleteSeerr = document.getElementById('libDeleteSeerr').checked;
+  closeLibModal('libDeleteModal');
+  showToast('Deleting '+item.title+'...','info');
+  try {
+    var url = item.type==='movie' ? '/api/library/delete' : '/api/shows/delete';
+    var body = item.type==='movie'
+      ? {item_id:item.id,folder:item.folder||'',tmdb_id:item.tmdb_id,title:item.title,delete_seerr:deleteSeerr}
+      : {item_id:item.id};
+    var d = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json();});
+    if (d.ok) { showToast('Deleted: '+item.title,'success'); setTimeout(loadLib,1000); }
+    else showToast(d.error||'Delete failed','error');
+  } catch(e) { showToast('Delete failed','error'); }
+  libPendingDelete = null;
+}
+</script>

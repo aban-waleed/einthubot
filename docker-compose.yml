@@ -1,0 +1,34 @@
+services:
+  einthubot:
+    build: .
+    container_name: einthubot
+    restart: unless-stopped
+    user: "0:0"
+    ports:
+      - "${WEB_PORT:-7879}:7878"
+    volumes:
+      - "/home/phantom/media/movies:/downloads/einthusan"
+      - ./logs:/app/logs
+    environment:
+      # ── Einthusan Premium Account ──────────────────────────────────
+      EINTHUSAN_EMAIL:    ${EINTHUSAN_EMAIL}
+      EINTHUSAN_PASSWORD: ${EINTHUSAN_PASSWORD}
+      EINTHUSAN_LANGUAGE: ${EINTHUSAN_LANGUAGE:-hindi}
+      # -- Jellyfin -------
+      JELLYFIN_URL:     ${JELLYFIN_URL:-http://jellyfin:8096}
+      JELLYFIN_API_KEY: ${JELLYFIN_API_KEY}
+      # ── Jellyseerr ─────────────────────────────────────────────────
+      SEERR_URL:     ${SEERR_URL:-http://seerr:5055}
+      SEERR_API_KEY: ${SEERR_API_KEY}
+      # ── Download destination ───────────────────────────────────────
+      DOWNLOAD_DIR:    /downloads/einthusan
+      POLL_INTERVAL:   ${POLL_INTERVAL:-120}
+      # ── Web UI ─────────────────────────────────────────────────────
+      WEB_PORT:        7878
+      TMDB_API_KEY:    ${TMDB_API_KEY}
+      UMASK:           "000"
+    networks:
+      - jelly-stack_default
+networks:
+  jelly-stack_default:
+    external: true

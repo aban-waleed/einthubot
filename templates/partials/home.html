@@ -1,0 +1,143 @@
+<style>
+  .page-inner { padding:28px 32px; max-width:1300px; margin:0 auto; }
+  .stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:20px; }
+  .stat-card { background:var(--surface); border:0.5px solid var(--border2); border-radius:var(--radius); padding:14px 16px; }
+  .stat-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; margin-bottom:6px; }
+  .stat-value { font-size:24px; font-weight:700; }
+  .sv-w { color:var(--text); } .sv-o { color:var(--accent); } .sv-g { color:var(--success); } .sv-b { color:var(--info); }
+  .home-cols { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .section-label { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.08em; color:var(--muted2); margin-bottom:12px; }
+  .card { background:var(--surface); border:0.5px solid var(--border2); border-radius:var(--radius); overflow:hidden; }
+  .req-card { background:var(--surface); border:0.5px solid var(--border2); border-radius:var(--radius); overflow:hidden; margin-bottom:8px; display:flex; }
+  .req-poster-strip { width:60px; flex-shrink:0; background:var(--border2); display:flex; align-items:center; justify-content:center; font-size:20px; min-height:78px; }
+  .req-poster-strip img { width:60px; height:100%; object-fit:cover; display:block; }
+  .req-body { flex:1; padding:12px 14px; min-width:0; }
+  .req-title { font-size:13px; font-weight:600; margin-bottom:8px; }
+  .btn-approve { background:var(--accent); color:#000; font-size:12px; padding:6px 14px; border-radius:7px; border:none; cursor:pointer; font-weight:700; }
+  .btn-approve:disabled { opacity:0.4; cursor:not-allowed; }
+  .activity-item { display:flex; gap:12px; padding:11px 16px; border-bottom:0.5px solid var(--border); font-size:13px; }
+  .activity-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; margin-top:5px; }
+  .d-success{background:var(--success);} .d-error{background:var(--error);} .d-pending{background:var(--accent);animation:pulse 1.5s infinite;} .d-info{background:var(--info);}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+  .act-body { flex:1; min-width:0; }
+  .act-title { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .act-msg   { color:var(--muted); margin-top:2px; line-height:1.4; font-size:12px; }
+  .act-time  { font-size:11px; color:var(--muted); flex-shrink:0; }
+  .act-badge { display:inline-block; padding:1px 6px; border-radius:4px; font-size:10px; font-weight:700; text-transform:uppercase; margin-left:5px; }
+  .ab-seerr{background:rgba(91,141,238,0.2);color:var(--info);}
+  .ab-search{background:rgba(240,151,30,0.2);color:var(--accent);}
+  .ab-download{background:rgba(59,212,122,0.2);color:var(--success);}
+  .ab-library{background:rgba(224,59,59,0.2);color:var(--error);}
+  .ab-system{background:rgba(90,90,122,0.2);color:var(--muted);}
+  .empty-state{padding:32px 20px;text-align:center;color:var(--muted);}
+  .empty-icon{font-size:28px;margin-bottom:8px;}
+  .empty-label{font-size:13px;}
+  .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:5px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+
+<div class="page-inner">
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-label">Library</div><div class="stat-value sv-w" id="statMovies"><span class="spin"></span></div></div>
+    <div class="stat-card"><div class="stat-label">Pending</div><div class="stat-value sv-o" id="statPending">—</div></div>
+    <div class="stat-card"><div class="stat-label">Downloading</div><div class="stat-value sv-g" id="statActive">—</div></div>
+    <div class="stat-card"><div class="stat-label">Storage used</div><div class="stat-value sv-b" id="statStorage">—</div></div>
+  </div>
+  <div class="home-cols">
+    <div>
+      <div class="section-label">Pending requests</div>
+      <div id="homePending"><div class="empty-state"><span class="spin"></span></div></div>
+    </div>
+    <div>
+      <div class="section-label">Recent activity</div>
+      <div class="card"><div id="homeActivity" style="max-height:320px;overflow-y:auto;"></div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const ABMAP = {seerr:'ab-seerr',search:'ab-search',download:'ab-download',library:'ab-library',system:'ab-system'};
+const DMAP  = {success:'d-success',error:'d-error',pending:'d-pending',info:'d-info'};
+
+window.init_home = async function() {
+  try {
+    const [lib, reqs, dls, act] = await Promise.all([
+      fetch('/api/library').then(r=>r.json()),
+      fetch('/api/requests').then(r=>r.json()),
+      fetch('/api/downloads').then(r=>r.json()),
+      fetch('/api/activity').then(r=>r.json()),
+    ]);
+
+    const libArr = Array.isArray(lib)  ? lib  : [];
+    const reqArr = Array.isArray(reqs) ? reqs : [];
+    const dlArr  = Array.isArray(dls)  ? dls  : [];
+    const actArr = Array.isArray(act)  ? act  : [];
+
+    // Stats
+    document.getElementById('statMovies').textContent  = libArr.length;
+    document.getElementById('statPending').textContent = reqArr.filter(r=>r.status==='pending').length;
+    document.getElementById('statActive').textContent  = dlArr.filter(d=>d.status==='downloading').length;
+    const totalMB = dlArr.reduce((a,d)=>a+(d.size_mb||0),0);
+    // Fetch real storage from Jellyfin
+    try {
+      const storage = await fetch('/api/storage').then(r=>r.json());
+      document.getElementById('statStorage').textContent = storage.size || '—';
+    } catch(e) {
+      document.getElementById('statStorage').textContent = '—';
+    }
+
+    // Update sidebar badges
+    window.setReqBadge(reqArr.filter(r=>r.status==='pending').length);
+    // Include shows in library badge
+    try {
+      const shows = await fetch('/api/shows').then(r=>r.json());
+      const showCount = Array.isArray(shows) ? shows.length : 0;
+      window.setLibBadge(libArr.length + showCount);
+    } catch(e) {
+      window.setLibBadge(libArr.length);
+    }
+    window.updateSidebarDl(dlArr);
+
+    // Pending requests
+    const pending = reqArr.filter(r=>r.status==='pending');
+    const hp = document.getElementById('homePending');
+    if (!pending.length) {
+      hp.innerHTML = `<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-label">No pending requests</div></div>`;
+    } else {
+      hp.innerHTML = pending.slice(0,4).map(req=>`
+        <div class="req-card">
+          <div class="req-poster-strip">${req.poster?`<img src="${esc(req.poster)}" alt="" onerror="this.style.display='none'">`:'🎬'}</div>
+          <div class="req-body">
+            <div class="req-title">${esc(req.title)} <span style="color:var(--muted);font-weight:400;">(${esc(req.year)})</span></div>
+            <button class="btn-approve" onclick="homeApprove(${req.id},'${esc(req.title)}','${esc(req.year)}','${esc(req.original_title||'')}',this)">▶ Download</button>
+          </div>
+        </div>`).join('');
+    }
+
+    // Activity
+    const ha = document.getElementById('homeActivity');
+    if (!actArr.length) {
+      ha.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-label">No activity yet</div></div>`;
+    } else {
+      ha.innerHTML = actArr.slice(0,8).map(a=>`
+        <div class="activity-item">
+          <div class="activity-dot ${DMAP[a.status]||'d-info'}"></div>
+          <div class="act-body">
+            <div class="act-title">${esc(a.title)}<span class="act-badge ${ABMAP[a.kind]||'ab-system'}">${esc(a.kind)}</span></div>
+            <div class="act-msg">${esc(a.msg)}</div>
+          </div>
+          <div class="act-time">${esc((a.time||'').split(' ')[1]||a.time)}</div>
+        </div>`).join('');
+    }
+  } catch(e) { console.error(e); }
+};
+
+async function homeApprove(reqId, title, year, orig, btn) {
+  btn.disabled = true; btn.textContent = '⏳…';
+  try {
+    const d = await fetch('/api/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:reqId,title,year,original_title:orig})}).then(r=>r.json());
+    if (d.ok) { showToast(`Searching for "${title}"…`,'info','Approved'); btn.textContent='⬇ Queued'; btn.style.opacity='0.5'; }
+    else { showToast(d.error||'Failed','error'); btn.disabled=false; btn.textContent='▶ Download'; }
+  } catch(e) { showToast('Failed','error'); btn.disabled=false; btn.textContent='▶ Download'; }
+}
+</script>

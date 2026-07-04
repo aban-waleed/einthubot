@@ -1,0 +1,116 @@
+<style>
+  .page-inner{padding:28px 32px;max-width:1300px;margin:0 auto;}
+  .section-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted2);margin-bottom:12px;}
+  .dl-card{background:var(--surface);border:0.5px solid var(--border2);border-radius:var(--radius);padding:16px 18px;margin-bottom:10px;}
+  .dl-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;gap:10px;}
+  .dl-title-row{font-size:14px;font-weight:600;}
+  .dl-meta{font-size:11px;color:var(--muted);margin-top:3px;}
+  .dl-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap;flex-shrink:0;}
+  .dl-status{display:inline-block;padding:3px 8px;border-radius:5px;font-size:11px;font-weight:700;text-transform:uppercase;}
+  .ds-downloading{background:rgba(240,151,30,0.15);color:var(--accent);}
+  .ds-completed{background:rgba(59,212,122,0.15);color:var(--success);}
+  .ds-error{background:rgba(224,59,59,0.15);color:var(--error);}
+  .ds-queued{background:rgba(91,141,238,0.15);color:var(--info);}
+  .ds-paused{background:rgba(91,141,238,0.15);color:var(--info);}
+  .ds-pausing{background:rgba(91,141,238,0.15);color:var(--info);}
+  .prog-wrap{background:var(--border2);border-radius:4px;height:6px;overflow:hidden;}
+  .prog-bar{height:6px;border-radius:4px;background:linear-gradient(90deg,var(--accent),var(--success));transition:width 0.5s;}
+  .prog-bar.paused{background:var(--info);}
+  .prog-bar.errored{background:var(--error);}
+  .prog-labels{font-size:11px;color:var(--muted);margin-top:5px;display:flex;justify-content:space-between;}
+  .tmdb-chip{display:inline-block;font-size:10px;color:var(--muted);background:var(--surface2);border:0.5px solid var(--border2);border-radius:4px;padding:1px 6px;margin-left:5px;}
+  .btn-ghost{background:transparent;border:0.5px solid var(--border2);color:var(--muted);font-size:12px;padding:4px 10px;border-radius:6px;cursor:pointer;}
+  .btn-pause{background:rgba(240,151,30,0.12);border:0.5px solid var(--accent);color:var(--accent);font-size:12px;padding:4px 10px;border-radius:6px;cursor:pointer;font-weight:600;}
+  .btn-resume{background:rgba(59,212,122,0.12);border:0.5px solid var(--success);color:var(--success);font-size:12px;padding:4px 10px;border-radius:6px;cursor:pointer;font-weight:600;}
+  .btn-cancel{background:rgba(224,59,59,0.12);border:0.5px solid var(--error);color:var(--error);font-size:12px;padding:4px 10px;border-radius:6px;cursor:pointer;font-weight:600;}
+  .empty-state{padding:48px 20px;text-align:center;color:var(--muted);}
+  .empty-icon{font-size:32px;margin-bottom:10px;}
+  .empty-label{font-size:13px;}
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:200;opacity:0;pointer-events:none;transition:opacity 0.2s;}
+  .modal-overlay.show{opacity:1;pointer-events:all;}
+  .confirm-wrap{background:var(--surface);border:0.5px solid var(--border2);border-radius:14px;padding:24px;width:400px;}
+  .confirm-wrap h3{font-size:15px;font-weight:600;margin-bottom:8px;}
+  .confirm-wrap p{font-size:13px;color:var(--muted);margin-bottom:16px;}
+  .confirm-actions{display:flex;gap:8px;justify-content:flex-end;}
+  .btn{padding:8px 16px;border-radius:8px;border:none;font-size:13px;font-weight:600;cursor:pointer;transition:opacity 0.15s;}
+  .btn:hover{opacity:0.85;}
+  .btn-outline{background:transparent;border:0.5px solid var(--border2);color:var(--muted);}
+  .btn-sm{padding:5px 12px;font-size:12px;}
+  .btn-danger{background:var(--error);color:#fff;}
+</style>
+
+<div class="page-inner">
+  <div class="section-label">Active downloads</div>
+  <div id="activeDls"><div class="empty-state"><div class="empty-icon">⬇️</div><div class="empty-label">No active downloads</div></div></div>
+  <div style="margin-top:28px;">
+    <div class="section-label">History</div>
+    <div id="dlHistory"><div class="empty-state"><div class="empty-icon">📂</div><div class="empty-label">No download history yet</div></div></div>
+  </div>
+</div>
+
+<!-- Remove modal -->
+<div class="modal-overlay" id="dlRemoveModal">
+  <div class="confirm-wrap">
+    <h3>Remove download</h3>
+    <p id="dlRemoveMsg"></p>
+    <div class="confirm-actions">
+      <button class="btn btn-outline btn-sm" onclick="document.getElementById('dlRemoveModal').classList.remove('show')">Cancel</button>
+      <button class="btn btn-outline btn-sm" onclick="dlConfirmRemove(false)">Remove from list</button>
+      <button class="btn btn-danger btn-sm" onclick="dlConfirmRemove(true)">Delete file too</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let dlPendingRemove = null;
+
+function dsc(s){return({downloading:'ds-downloading',completed:'ds-completed',error:'ds-error',queued:'ds-queued',paused:'ds-paused',pausing:'ds-pausing'})[s]||'ds-queued';}
+function dsl(s){return({downloading:'Downloading',completed:'Completed',error:'Error',queued:'Queued',paused:'Paused',pausing:'Pausing…'})[s]||s;}
+function barCls(s){return s==='error'?'errored':s==='paused'||s==='pausing'?'paused':'';}
+
+function renderDl(dl) {
+  const p=dl.progress||0, id=esc(dl.id), t=esc(dl.title);
+  const isDown=dl.status==='downloading', isPaused=dl.status==='paused';
+  const sz=dl.total_mb>0?`${dl.size_mb} / ${dl.total_mb} MB`:dl.size_mb>0?`${dl.size_mb} MB`:'';
+  const tm=dl.started?`Started ${(dl.started||'').split(' ')[1]}`:dl.queued?`Queued ${(dl.queued||'').split(' ')[1]}`:'';
+  const fn=dl.finished?` · Finished ${(dl.finished||'').split(' ')[1]}`:'';
+  let acts='';
+  if(isDown) acts=`<button class="btn-pause" onclick="dlPause('${id}')">⏸ Pause</button><button class="btn-cancel" onclick="dlCancel('${id}')">✕ Cancel</button>`;
+  if(isPaused) acts=`<button class="btn-resume" onclick="dlResume('${id}')">▶ Resume</button><button class="btn-cancel" onclick="dlCancel('${id}')">✕ Cancel</button>`;
+  const showRm=['completed','error'].includes(dl.status);
+  return `<div class="dl-card">
+    <div class="dl-header">
+      <div><div class="dl-title-row">${t}${dl.year?` <span style="color:var(--muted);font-weight:400;">(${esc(dl.year)})</span>`:''}${dl.tmdb_id?`<span class="tmdb-chip">tmdb-${dl.tmdb_id}</span>`:''}</div><div class="dl-meta">${tm}${fn}</div></div>
+      <div class="dl-actions"><span class="dl-status ${dsc(dl.status)}">${dsl(dl.status)}</span>${acts}${showRm?`<button class="btn-ghost" onclick="dlOpenRemove('${id}','${t}')">🗑 Remove</button>`:''}</div>
+    </div>
+    <div class="prog-wrap"><div class="prog-bar ${barCls(dl.status)}" style="width:${p}%"></div></div>
+    <div class="prog-labels"><span>${p}%</span><span>${sz}</span></div>
+  </div>`;
+}
+
+async function refreshDls(data) {
+  if (!data) data = await fetch('/api/downloads').then(r=>r.json());
+  const active  = data.filter(d=>['downloading','queued','paused','pausing'].includes(d.status));
+  const history = data.filter(d=>['completed','error'].includes(d.status)).reverse();
+  const ae = document.getElementById('activeDls');
+  const he = document.getElementById('dlHistory');
+  if (ae) ae.innerHTML = active.length  ? active.map(renderDl).join('')  : `<div class="empty-state"><div class="empty-icon">⬇️</div><div class="empty-label">No active downloads</div></div>`;
+  if (he) he.innerHTML = history.length ? history.map(renderDl).join('') : `<div class="empty-state"><div class="empty-icon">📂</div><div class="empty-label">No download history yet</div></div>`;
+  window.updateSidebarDl(data);
+}
+
+async function dlPause(id)  { await fetch(`/api/pause/${id}`,{method:'POST'}); showToast('Paused','info'); setTimeout(refreshDls,500); }
+async function dlResume(id) { await fetch(`/api/resume/${id}`,{method:'POST'}); showToast('Resumed','info'); setTimeout(refreshDls,500); }
+async function dlCancel(id) { await fetch(`/api/cancel/${id}`,{method:'POST'}); showToast('Cancelled','error'); setTimeout(refreshDls,500); }
+function dlOpenRemove(id, t) { dlPendingRemove=id; document.getElementById('dlRemoveMsg').textContent=`Remove "${t}" from history?`; document.getElementById('dlRemoveModal').classList.add('show'); }
+async function dlConfirmRemove(del) {
+  if (!dlPendingRemove) return;
+  await fetch(`/api/remove/${dlPendingRemove}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({delete_file:del})});
+  document.getElementById('dlRemoveModal').classList.remove('show');
+  showToast(del?'File deleted':'Removed','info');
+  setTimeout(refreshDls, 300);
+}
+
+window.init_downloads = refreshDls;
+window._refreshDownloads = refreshDls;
+</script>

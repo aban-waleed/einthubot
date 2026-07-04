@@ -1,0 +1,116 @@
+<style>
+  .page-inner{padding:28px 32px;max-width:1300px;margin:0 auto;}
+  .page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;}
+  .page-title{font-size:18px;font-weight:700;}
+  .btn{padding:8px 16px;border-radius:8px;border:none;font-size:13px;font-weight:600;cursor:pointer;transition:opacity 0.15s;}
+  .btn:hover{opacity:0.85;}
+  .btn-outline{background:transparent;border:0.5px solid var(--border2);color:var(--muted);}
+  .btn-sm{padding:5px 12px;font-size:12px;}
+  .btn-approve{background:var(--accent);color:#000;font-size:12px;padding:6px 14px;border-radius:7px;border:none;cursor:pointer;font-weight:700;}
+  .btn-approve:disabled{opacity:0.4;cursor:not-allowed;}
+  .filter-bar{display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap;}
+  .filter-btn{padding:5px 14px;border-radius:20px;border:0.5px solid var(--border2);background:transparent;color:var(--muted);font-size:12px;cursor:pointer;transition:all 0.15s;}
+  .filter-btn.active{background:var(--accent);color:#000;border-color:var(--accent);font-weight:700;}
+  .req-card{background:var(--surface);border:0.5px solid var(--border2);border-radius:var(--radius);overflow:hidden;margin-bottom:10px;display:flex;}
+  .req-poster-strip{width:66px;flex-shrink:0;background:var(--border2);display:flex;align-items:center;justify-content:center;font-size:22px;min-height:90px;}
+  .req-poster-strip img{width:66px;height:100%;object-fit:cover;display:block;}
+  .req-body{flex:1;padding:13px 15px;min-width:0;}
+  .req-title{font-size:14px;font-weight:600;margin-bottom:3px;}
+  .req-meta{font-size:11px;color:var(--muted);margin-bottom:9px;}
+  .req-footer{display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
+  .req-status{display:inline-block;padding:3px 9px;border-radius:5px;font-size:10px;font-weight:700;text-transform:uppercase;}
+  .rs-pending{background:rgba(240,151,30,0.15);color:var(--accent);}
+  .rs-approved{background:rgba(59,212,122,0.15);color:var(--success);}
+  .rs-processing{background:rgba(91,141,238,0.15);color:var(--info);}
+  .rs-available{background:rgba(59,212,122,0.2);color:var(--success);}
+  .rs-declined{background:rgba(224,59,59,0.15);color:var(--error);}
+  .rs-partial{background:rgba(251,146,60,0.15);color:#fb923c;border:0.5px solid rgba(251,146,60,0.4);}
+  .rs-einthubot{background:rgba(240,151,30,0.2);color:var(--accent);border:0.5px solid rgba(240,151,30,0.4);}
+  .rs-completed{background:rgba(59,212,122,0.2);color:var(--success);border:0.5px solid rgba(59,212,122,0.4);}
+  .rs-downloading{background:rgba(240,151,30,0.1);color:var(--accent);animation:pulse 1.5s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+  .empty-state{padding:48px 20px;text-align:center;color:var(--muted);}
+  .empty-icon{font-size:32px;margin-bottom:10px;}
+  .empty-label{font-size:13px;}
+  .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:5px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+
+<div class="page-inner">
+  <div class="page-header">
+    <div class="page-title">Requests</div>
+    <button class="btn btn-outline btn-sm" onclick="loadReqs()">↻ Refresh</button>
+  </div>
+  <div class="filter-bar">
+    <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
+    <button class="filter-btn" onclick="setFilter('pending',this)">Pending</button>
+    <button class="filter-btn" onclick="setFilter('approved',this)">Approved</button>
+    <button class="filter-btn" onclick="setFilter('processing',this)">Processing</button>
+    <button class="filter-btn" onclick="setFilter('available',this)">Available</button>
+    <button class="filter-btn" onclick="setFilter('declined',this)">Declined</button>
+  </div>
+  <div id="reqList"><div class="empty-state"><span class="spin"></span> Loading…</div></div>
+</div>
+
+<script>
+const RS = {pending:{l:'Pending',c:'rs-pending'},approved:{l:'Approved',c:'rs-approved'},processing:{l:'Processing',c:'rs-processing'},available:{l:'Available',c:'rs-available'},declined:{l:'Declined',c:'rs-declined'},partial:{l:'Partially Available',c:'rs-partial'}};
+let allReqs = [], reqFilter = 'all';
+
+function setFilter(f, btn) {
+  reqFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderReqs();
+}
+
+function renderReqs() {
+  const el = document.getElementById('reqList');
+  const list = reqFilter==='all' ? allReqs : allReqs.filter(r=>r.status===reqFilter);
+  if (!list.length) { el.innerHTML=`<div class="empty-state"><div class="empty-icon">📥</div><div class="empty-label">No ${reqFilter==='all'?'':reqFilter+' '}requests</div></div>`; return; }
+  el.innerHTML = list.map(req => {
+    const st = RS[req.status]||{l:req.status,c:'rs-pending'};
+    const isCompleted=req.einthubot_completed, dlStatus=req.download_status;
+    const isDown=['downloading','queued','pausing'].includes(dlStatus), isPaused=dlStatus==='paused';
+    const canApprove=!isCompleted&&!isDown&&!isPaused&&req.media_type==='movie';
+    let badge='';
+    if(isCompleted)  badge=`<span class="req-status rs-completed">✓ Completed</span>`;
+    else if(isDown)  badge=`<span class="req-status rs-downloading">⬇ Downloading</span>`;
+    else if(isPaused)badge=`<span class="req-status rs-einthubot">⏸ Paused</span>`;
+    else if(req.einthubot_approved) badge=`<span class="req-status rs-einthubot">⬇ EinthuBot</span>`;
+    return `
+      <div class="req-card">
+        <div class="req-poster-strip">${req.poster?`<img src="${esc(req.poster)}" alt="" onerror="this.style.display='none'">`:'🎬'}</div>
+        <div class="req-body">
+          <div class="req-title">${esc(req.title)} <span style="color:var(--muted);font-weight:400;">(${esc(req.year)})</span></div>
+          <div class="req-meta">Requested by <strong>${esc(req.requested_by||'Unknown')}</strong> · ${new Date(req.created_at).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}${req.original_title&&req.original_title!==req.title?` · aka ${esc(req.original_title)}`:''}</div>
+          <div class="req-footer">
+            <span class="req-status ${st.c}">${st.l}</span>
+            ${badge}
+            ${canApprove?`<button class="btn-approve" onclick="reqApprove(${req.id},'${esc(req.title)}','${esc(req.year)}','${esc(req.original_title||'')}',this)">▶ Download</button>`:''}
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function loadReqs() {
+  document.getElementById('reqList').innerHTML=`<div class="empty-state"><span class="spin"></span> Loading…</div>`;
+  try {
+    allReqs = await fetch('/api/requests').then(r=>r.json());
+    if (allReqs.error) throw new Error(allReqs.error);
+    window.setReqBadge(allReqs.filter(r=>r.status==='pending').length);
+    renderReqs();
+  } catch(e) { document.getElementById('reqList').innerHTML=`<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-label">Could not load requests</div></div>`; }
+}
+
+async function reqApprove(reqId, title, year, orig, btn) {
+  btn.disabled=true; btn.textContent='⏳ Searching…';
+  try {
+    const d=await fetch('/api/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:reqId,title,year,original_title:orig})}).then(r=>r.json());
+    if(d.ok){showToast(`Searching for "${title}"…`,'info','Approved');btn.textContent='⬇ Queued';btn.style.opacity='0.5';setTimeout(loadReqs,2000);}
+    else{showToast(d.error||'Failed','error');btn.disabled=false;btn.textContent='▶ Download';}
+  }catch(e){showToast('Failed','error');btn.disabled=false;btn.textContent='▶ Download';}
+}
+
+window.init_requests = loadReqs;
+</script>

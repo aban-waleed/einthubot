@@ -1,0 +1,804 @@
+<style>
+  * { box-sizing:border-box; }
+  .page-inner { padding:28px 32px; max-width:900px; margin:0 auto; padding-bottom:100px; }
+  .settings-section { background:var(--surface); border:0.5px solid var(--border2); border-radius:var(--radius,10px); overflow:hidden; margin-bottom:20px; }
+  .settings-header { padding:16px 20px; border-bottom:0.5px solid var(--border); display:flex; align-items:center; gap:12px; }
+  .settings-icon { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .settings-icon svg { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .settings-title { font-size:14px; font-weight:600; color:var(--text); }
+  .settings-desc  { font-size:11px; color:var(--muted); margin-top:2px; }
+  .settings-body  { padding:0; }
+  .setting-row { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:14px 20px; border-bottom:0.5px solid var(--border); }
+  .setting-row:last-child { border-bottom:none; }
+  .setting-left { flex:1; min-width:0; }
+  .setting-label { font-size:13px; font-weight:500; color:var(--text); }
+  .setting-hint  { font-size:11px; color:var(--muted); margin-top:2px; line-height:1.4; }
+  .setting-input {
+    background:var(--surface2); border:0.5px solid var(--border2);
+    color:var(--text); border-radius:8px; padding:8px 12px;
+    font-size:13px; outline:none; transition:border-color 0.2s;
+    min-width:260px; font-family:inherit;
+  }
+  .setting-input:focus { border-color:var(--accent); }
+  .setting-input.masked { letter-spacing:3px; }
+  .setting-input::placeholder { letter-spacing:normal; color:var(--muted); }
+  .input-wrap { position:relative; display:flex; align-items:center; }
+  .eye-btn { position:absolute; right:10px; cursor:pointer; color:var(--muted); background:none; border:none; padding:0; display:flex; align-items:center; }
+  .eye-btn svg { width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  select.setting-input { cursor:pointer; min-width:180px; }
+  select.setting-input option { background:var(--surface); color:var(--text); }
+  .btn { padding:8px 16px; border-radius:8px; border:none; font-size:13px; font-weight:600; cursor:pointer; transition:opacity 0.15s; font-family:inherit; }
+  .btn:hover { opacity:0.85; }
+  .btn-accent  { background:var(--accent-btn-bg,var(--accent)); color:#000; }
+  .btn-outline { background:transparent; border:0.5px solid var(--border2); color:var(--muted); }
+  .btn-danger  { background:rgba(224,59,59,0.1); border:0.5px solid #e03b3b; color:#e03b3b; }
+  .btn-success { background:rgba(59,212,122,0.1); border:0.5px solid #3bd47a; color:#3bd47a; }
+  .btn-sm { padding:6px 14px; font-size:12px; }
+  .btn-row { display:flex; gap:8px; align-items:center; flex-shrink:0; }
+  .conn-badge { font-size:11px; font-weight:600; padding:3px 9px; border-radius:5px; white-space:nowrap; }
+  .conn-ok  { background:rgba(59,212,122,0.15); color:#3bd47a; }
+  .conn-err { background:rgba(224,59,59,0.15); color:#e03b3b; }
+  .conn-unknown { background:rgba(90,90,122,0.15); color:var(--muted); }
+
+  /* Theme grid */
+  .theme-section-label { font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; padding:16px 20px 12px; }
+  .theme-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:10px; padding:0 20px 20px; }
+  .theme-card { border:1.5px solid var(--border2); border-radius:10px; overflow:hidden; cursor:pointer; transition:border-color 0.15s,transform 0.1s; }
+  .theme-card:hover { transform:translateY(-2px); border-color:var(--accent); }
+  .theme-card.active { border-color:var(--accent); box-shadow:0 0 0 2px var(--accent) inset; }
+  .theme-preview { height:52px; padding:8px; display:flex; flex-direction:column; gap:4px; }
+  .tp-dot  { width:8px; height:8px; border-radius:2px; flex-shrink:0; }
+  .tp-line { height:3px; border-radius:2px; flex:1; }
+  .tp-row  { display:flex; gap:4px; align-items:center; }
+  .tp-btn  { height:10px; border-radius:3px; width:45%; margin-top:2px; }
+  .theme-footer { padding:5px 8px; display:flex; align-items:center; justify-content:space-between; }
+  .theme-name-label { font-size:10px; font-weight:700; }
+  .theme-swatch { width:9px; height:9px; border-radius:50%; }
+  .excl-badge { font-size:8px; font-weight:700; padding:1px 4px; border-radius:3px; margin-left:3px; vertical-align:middle; }
+
+  /* Save bar */
+  .save-bar { transition:all 0.2s ease; }
+  .save-bar { position:fixed; bottom:0; right:0; left:var(--sb,220px); background:var(--surface); border-top:0.5px solid var(--border2); padding:14px 32px; display:flex; align-items:center; justify-content:space-between; z-index:50; transition:left 0.25s; }
+  .save-hint { font-size:12px; color:var(--muted); }
+  .save-ok   { font-size:12px; color:#3bd47a; display:none; }
+  .save-ok.show { display:block; }
+
+  /* Reveal bar */
+  .reveal-bar {
+    position:sticky; top:0; z-index:40;
+    background:var(--surface); border-bottom:0.5px solid var(--border2);
+    padding:14px 32px; display:flex; align-items:center;
+    justify-content:space-between; gap:20px;
+  }
+  .toggle { position:relative; width:40px; height:22px; flex-shrink:0; }
+  .toggle input { opacity:0; width:0; height:0; }
+  .toggle-slider { position:absolute; inset:0; background:var(--border2); border-radius:11px; cursor:pointer; transition:background 0.2s; }
+  .toggle-slider::before { content:''; position:absolute; width:16px; height:16px; left:3px; top:3px; background:#fff; border-radius:50%; transition:transform 0.2s; }
+  .toggle input:checked + .toggle-slider { background:var(--accent); }
+  .toggle input:checked + .toggle-slider::before { transform:translateX(18px); }
+
+  .spin { display:inline-block; width:13px; height:13px; border:2px solid var(--border2); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; vertical-align:middle; margin-right:4px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+</style>
+
+<div class="reveal-bar">
+  <div style="display:flex;align-items:center;gap:12px;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <label class="toggle">
+        <input type="checkbox" id="revealToggle" onchange="handleRevealToggle(this.checked)">
+        <span class="toggle-slider"></span>
+      </label>
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text);" id="revealLabel">Show sensitive values</div>
+        <div style="font-size:11px;color:var(--muted);" id="revealHint">Toggle to reveal passwords and API keys</div>
+      </div>
+    </div>
+    <div id="revealStatus" style="font-size:11px;padding:3px 10px;border-radius:5px;display:none;"></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:6px;">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted);flex-shrink:0;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+    <span style="font-size:11px;color:var(--muted);">Values are read directly from your server .env</span>
+  </div>
+</div>
+
+<div class="page-inner">
+
+  <!-- ── Appearance / Theme ── -->
+  <div class="settings-section">
+    <div class="settings-header">
+      <div class="settings-icon" style="background:rgba(240,151,30,0.15);color:var(--accent);">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </div>
+      <div>
+        <div class="settings-title">Appearance</div>
+        <div class="settings-desc">Theme color — saved permanently in your browser</div>
+      </div>
+    </div>
+    <div class="theme-section-label">Choose a theme</div>
+    <div class="theme-grid" id="themeGrid"></div>
+  </div>
+
+  <!-- ── Einthusan ── -->
+  <div class="settings-section">
+    <div class="settings-header">
+      <div class="settings-icon" style="background:rgba(91,141,238,0.15);color:#5b8dee;">
+        <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      </div>
+      <div>
+        <div class="settings-title">Einthusan Account</div>
+        <div class="settings-desc">Login credentials and default language</div>
+      </div>
+      <div style="margin-left:auto;" id="einthusanConn"></div>
+    </div>
+    <div class="settings-body">
+      <div class="setting-row">
+        <div class="setting-left"><div class="setting-label">Email</div><div class="setting-hint">Your Einthusan Premium account email</div></div>
+        <input class="setting-input" id="setEmail" type="email" placeholder="your@email.com" />
+      </div>
+      <div class="setting-row">
+        <div class="setting-left"><div class="setting-label">Password</div><div class="setting-hint">Saved to your .env file on the server</div></div>
+        <div class="input-wrap">
+          <input class="setting-input" id="setPassword" type="text" placeholder="Leave blank to keep current value" style="padding-right:34px;" />
+          <button class="eye-btn" onclick="togglePass('setPassword',this)" title="Show/hide">
+            <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-left"><div class="setting-label">Default language</div><div class="setting-hint">Used for all searches and downloads</div></div>
+        <select class="setting-input" id="setLang">
+          <option value="hindi">Hindi</option>
+          <option value="tamil">Tamil</option>
+          <option value="telugu">Telugu</option>
+          <option value="malayalam">Malayalam</option>
+          <option value="kannada">Kannada</option>
+          <option value="bengali">Bengali</option>
+          <option value="punjabi">Punjabi</option>
+          <option value="marathi">Marathi</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <div class="setting-left"><div class="setting-label">Session</div><div class="setting-hint">Force a fresh login to Einthusan now</div></div>
+        <button class="btn btn-outline btn-sm" onclick="settingsReLogin()">↻ Re-login now</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Downloads ── -->
+  <div class="settings-section">
+    <div class="settings-header">
+      <div class="settings-icon" style="background:rgba(59,212,122,0.15);color:#3bd47a;">
+        <svg viewBox="0 0 24 24"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><polyline points="7,11 12,16 17,11"/><line x1="12" y1="4" x2="12" y2="16"/></svg>
+      </div>
+      <div>
+        <div class="settings-title">Downloads</div>
+        <div class="settings-desc">Where files are saved and polling frequency</div>
+      </div>
+    </div>
+    <div class="settings-body">
+      <div class="setting-row">
+        <div class="setting-left"><div class="setting-label">Download directory</div><div class="setting-hint">Absolute path on the server where MP4 files are saved</div></div>
+        <input class="setting-input" id="setDownloadDir" type="text" placeholder="/home/user/media/movies" style="min-width:300px;" />
+      </div>
+      <div class="setting-row">
+        <div class="setting-left"><div class="setting-label">Jellyseerr poll interval</div><div class="setting-hint">How often to check for new requests (seconds, min 30)</div></div>
+        <input class="setting-input" id="setPollInterval" type="number" min="30" max="3600" style="min-width:100px;" />
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Jellyfin ── -->
+  <div class="settings-section">
+    <div class="settings-header">
+      <div class="settings-icon" style="background:rgba(224,59,59,0.15);color:#e03b3b;">
+        <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M8 3l4 4 4-4"/></svg>
+      </div>
+      <div>
+        <div class="settings-title">Jellyfin</div>
+        <div class="settings-desc">Media server connection settings</div>
+      </div>
+      <div style="margin-left:auto;" id="jellyfinConn"></div>
+    </div>
+    <div class="settings-body">
+      <div class="setting-row">
+        <div class="setting-left"><div class="setting-label">Jellyfin URL</div><div class="setting-hint">Use container name inside Docker, e.g. http://jellyfin:8096</div></div>
+        <input class="setting-input" id="setJellyfinUrl" type="text" placeholder="http://jellyfin:8096" />
+      </div>
+      <div class="setting-row">
+        <div class="setting-left"><div class="setting-label">API Key</div><div class="setting-hint">Dashboard → API Keys → create new key</div></div>
+        <div class="input-wrap">
+          <input class="setting-input" id="setJellyfinKey" type="text" placeholder="Leave blank to keep current value" style="padding-right:34px;" />
+          <button class="eye-btn" onclick="togglePass('setJellyfinKey',this)" title="Show/hide">
+            <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-left"><div class="setting-label">Connection</div><div class="setting-hint">Verify EinthuBot can reach Jellyfin</div></div>
+        <div class="btn-row">
+          <button class="btn btn-outline btn-sm" onclick="testConn('jellyfin')">Test connection</button>
+          <button class="btn btn-success btn-sm" onclick="triggerScan()">↻ Scan library</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Jellyseerr ── -->
+  <div class="settings-section">
+    <div class="settings-header">
+      <div class="settings-icon" style="background:rgba(168,85,247,0.15);color:#a855f7;">
+        <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      </div>
+      <div>
+        <div class="settings-title">Jellyseerr</div>
+        <div class="settings-desc">Request management connection</div>
+      </div>
+      <div style="margin-left:auto;" id="seerrConn"></div>
+    </div>
+    <div class="settings-body">
+      <div class="setting-row">
+        <div class="setting-left"><div class="setting-label">Jellyseerr URL</div><div class="setting-hint">Use container name inside Docker, e.g. http://seerr:5055</div></div>
+        <input class="setting-input" id="setSeerrUrl" type="text" placeholder="http://seerr:5055" />
+      </div>
+      <div class="setting-row">
+        <div class="setting-left"><div class="setting-label">API Key</div><div class="setting-hint">Settings → General → API Key</div></div>
+        <div class="input-wrap">
+          <input class="setting-input" id="setSeerrKey" type="text" placeholder="Leave blank to keep current value" style="padding-right:34px;" />
+          <button class="eye-btn" onclick="togglePass('setSeerrKey',this)" title="Show/hide">
+            <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-left"><div class="setting-label">Connection</div><div class="setting-hint">Verify EinthuBot can reach Jellyseerr</div></div>
+        <button class="btn btn-outline btn-sm" onclick="testConn('seerr')">Test connection</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TMDB ── -->
+  <div class="settings-section">
+    <div class="settings-header">
+      <div class="settings-icon" style="background:rgba(251,146,60,0.15);color:#fb923c;">
+        <svg viewBox="0 0 24 24"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26 12,2"/></svg>
+      </div>
+      <div>
+        <div class="settings-title">TMDB</div>
+        <div class="settings-desc">Movie metadata, posters and cast — free API</div>
+      </div>
+    </div>
+    <div class="settings-body">
+      <div class="setting-row">
+        <div class="setting-left"><div class="setting-label">TMDB API Key</div><div class="setting-hint">Free at themoviedb.org → Settings → API → Create → Developer</div></div>
+        <div class="input-wrap">
+          <input class="setting-input" id="setTmdbKey" type="text" placeholder="Leave blank to keep current value" style="padding-right:34px;" />
+          <button class="eye-btn" onclick="togglePass('setTmdbKey',this)" title="Show/hide">
+            <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── About ── -->
+  <div class="settings-section">
+    <div class="settings-header">
+      <div class="settings-icon" style="background:rgba(90,90,122,0.15);color:var(--muted);">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
+      </div>
+      <div>
+        <div class="settings-title">About</div>
+        <div class="settings-desc">EinthuBot version and maintenance tools</div>
+      </div>
+    </div>
+    <div class="settings-body">
+      <div class="setting-row">
+        <div class="setting-left"><div class="setting-label">Version</div></div>
+        <span style="font-size:13px;color:var(--muted);font-family:monospace;">1.0.0</span>
+      </div>
+      <div class="setting-row">
+        <div class="setting-left"><div class="setting-label">GitHub</div><div class="setting-hint">Source code and issue tracker</div></div>
+        <a href="https://github.com/aban-waleed/einthubot" target="_blank" class="btn btn-outline btn-sm" style="text-decoration:none;">View on GitHub →</a>
+      </div>
+      <div class="setting-row">
+        <div class="setting-left"><div class="setting-label">Reset theme</div><div class="setting-hint">Restore the default Amber theme</div></div>
+        <button class="btn btn-outline btn-sm" onclick="resetTheme()">Reset to Amber</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Save bar — hidden until a change is made -->
+<div class="save-bar" id="saveBar" style="display:none;">
+  <div>
+    <div style="font-size:13px;font-weight:600;color:var(--text);">You have unsaved changes</div>
+    <div class="save-hint">Changes will be written to your .env file on the server</div>
+    <div class="save-ok" id="saveOk">✓ Saved to .env — restart the container to apply changes</div>
+  </div>
+  <div style="display:flex;gap:10px;">
+    <button class="btn btn-outline" onclick="discardSettings()">Discard</button>
+    <button class="btn btn-accent" onclick="saveSettings()">Save settings</button>
+  </div>
+</div>
+
+<script>
+// ── Theme definitions ─────────────────────────────────────────────────────────
+const THEMES_META = {
+  amber:    { name:'Amber',    accent:'#f0971e', bg:'#0a0a0f', surf:'#1a1a28', light:false, excl:false },
+  ocean:    { name:'Ocean',    accent:'#3b82f6', bg:'#0a0f1a', surf:'#111c2e', light:false, excl:false },
+  nebula:   { name:'Nebula',   accent:'#a855f7', bg:'#0d0a1a', surf:'#18112e', light:false, excl:false },
+  matrix:   { name:'Matrix',   accent:'#22c55e', bg:'#0a140a', surf:'#112011', light:false, excl:false },
+  crimson:  { name:'Crimson',  accent:'#ef4444', bg:'#140a0a', surf:'#241010', light:false, excl:false },
+  teal:     { name:'Teal',     accent:'#14b8a6', bg:'#0a1414', surf:'#112020', light:false, excl:false },
+  rose:     { name:'Rose',     accent:'#f43f5e', bg:'#140a10', surf:'#24101c', light:false, excl:false },
+  light:    { name:'Light',    accent:'#1a1a2e', bg:'#f0f0f8', surf:'#ffffff', light:true,  excl:false },
+  midnight: { name:'Midnight', accent:'#818cf8', bg:'#050508', surf:'#0f0f1c', light:false, excl:false },
+  sunset:   { name:'Sunset',   accent:'#fb923c', bg:'#140a05', surf:'#22140c', light:false, excl:false },
+  slate:    { name:'Slate',    accent:'#94a3b8', bg:'#0a0c10', surf:'#141820', light:false, excl:false },
+  sakura:   { name:'Sakura',   accent:'#f9a8d4', bg:'#140a10', surf:'#221020', light:false, excl:false },
+  aurora:       { name:'Aurora',       accent:'#c084fc', bg:'#06060a', surf:'#12121e', light:false, excl:true,  gradTo:'#818cf8',  animated:true },
+  nebula_storm: { name:'Nebula Storm', accent:'#7c3aed', bg:'#060612', surf:'#0a0a1a', light:false, excl:true,  gradTo:'#0ea5e9',  animated:true },
+  ember:        { name:'Ember',        accent:'#ea580c', bg:'#0a0500', surf:'#150800', light:false, excl:true,  gradTo:'#dc2626',  animated:true },
+  arctic:       { name:'Arctic',       accent:'#0ea5e9', bg:'#020b14', surf:'#051520', light:false, excl:true,  gradTo:'#06b6d4',  animated:true },
+  void:         { name:'Void',         accent:'#6d28d9', bg:'#020204', surf:'#08080e', light:false, excl:true,  gradTo:'#4f46e5',  animated:true },
+  neon_rain:    { name:'Neon Rain',    accent:'#00f5ff', bg:'#030610', surf:'#080e1a', light:false, excl:true,  gradTo:'#7c3aed',  animated:true },
+  lava_lamp:    { name:'Lava Lamp',    accent:'#d946ef', bg:'#06030a', surf:'#0e0614', light:false, excl:true,  gradTo:'#7c3aed',  animated:true },
+  grid_pulse:   { name:'Grid Pulse',   accent:'#00ff88', bg:'#020a04', surf:'#060e08', light:false, excl:true,  gradTo:'#00cc44',  animated:true },
+};
+
+function buildThemeGrid() {
+  const current = window._currentTheme || localStorage.getItem('einthubot_theme') || 'amber';
+  const grid = document.getElementById('themeGrid');
+  if (!grid) return;
+  grid.innerHTML = Object.entries(THEMES_META).map(([key, t]) => {
+    const accentDisp = t.gradTo ? `linear-gradient(135deg,${t.accent},${t.gradTo})` : t.accent;
+    const lineColor  = t.light ? '#ddddf0' : t.surf;
+    const footBg     = t.light ? '#e8e8f0' : '#060608';
+    return `<div class="theme-card ${key===current?'active':''}" onclick="pickTheme('${key}',this)">
+      <div class="theme-preview" style="background:${t.bg};">
+        <div class="tp-row">
+          <div class="tp-dot" style="background:${t.accent};"></div>
+          <div class="tp-line" style="background:${lineColor};"></div>
+        </div>
+        <div style="height:3px;border-radius:2px;width:60%;background:${accentDisp};"></div>
+        <div style="height:3px;border-radius:2px;width:80%;background:${lineColor};"></div>
+        <div class="tp-btn" style="background:${accentDisp};"></div>
+      </div>
+      <div class="theme-footer" style="background:${footBg};">
+        <span class="theme-name-label" style="color:${t.accent};">${t.name}${t.excl?`<span class="excl-badge" style="background:${accentDisp};color:#000;">⭐</span>`:''}
+        </span>
+        <div class="theme-swatch" style="background:${accentDisp};"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+let _pendingTheme = null;
+
+function pickTheme(name, el) {
+  document.querySelectorAll('.theme-card').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  // Preview only — apply visually but don't save to localStorage yet
+  window.applyThemePreview(name);
+  _pendingTheme = name;
+  _isDirty = true;
+  const bar = document.getElementById('saveBar');
+  if (bar) bar.style.display = 'flex';
+}
+
+function resetTheme() {
+  pickTheme('amber', document.querySelector('.theme-card'));
+  showToast('Reset to Amber', 'info');
+}
+
+// ── Toggle password visibility ─────────────────────────────────────────────────
+function togglePass(id, btn) {
+  const inp = document.getElementById(id);
+  if (!inp) return;
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    inp.classList.remove('masked');
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+  } else {
+    inp.type = 'password';
+    inp.classList.add('masked');
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+  }
+}
+
+// ── Connection tests ──────────────────────────────────────────────────────────
+async function testConn(type) {
+  const elId = type === 'jellyfin' ? 'jellyfinConn' : 'seerrConn';
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.innerHTML = `<span class="conn-badge conn-unknown"><span class="spin"></span>Testing…</span>`;
+  try {
+    if (type === 'jellyfin') {
+      const r = await fetch('/api/library').then(r=>r.json());
+      el.innerHTML = Array.isArray(r)
+        ? `<span class="conn-badge conn-ok">● Connected · ${r.length} movies</span>`
+        : `<span class="conn-badge conn-err">● Failed</span>`;
+    } else {
+      const r = await fetch('/api/requests').then(r=>r.json());
+      el.innerHTML = Array.isArray(r)
+        ? `<span class="conn-badge conn-ok">● Connected · ${r.length} requests</span>`
+        : `<span class="conn-badge conn-err">● Failed</span>`;
+    }
+  } catch(e) {
+    el.innerHTML = `<span class="conn-badge conn-err">● Failed</span>`;
+  }
+}
+
+async function triggerScan() {
+  showToast('Library scan triggered in Jellyfin', 'info');
+}
+
+async function settingsReLogin() {
+  showToast('Retrying Einthusan login…', 'info');
+  await fetch('/api/retry_login', { method:'POST' });
+  setTimeout(async () => {
+    const d = await fetch('/api/status').then(r=>r.json());
+    const el = document.getElementById('einthusanConn');
+    if (el) el.innerHTML = d.logged_in
+      ? `<span class="conn-badge conn-ok">● Online</span>`
+      : `<span class="conn-badge conn-err">● Offline</span>`;
+  }, 1500);
+}
+
+// ── Load settings from server ─────────────────────────────────────────────────
+async function loadSettings() {
+  try {
+    const d = await fetch('/api/settings').then(r=>r.json());
+
+    // Fill fields — only if value exists and is not a placeholder
+    const fill = (id, val) => {
+      const el = document.getElementById(id);
+      if (!el || !val) return;
+      // Never set dots as the actual value
+      if (val.startsWith('•') || val === '........') return;
+      el.value = val;
+    };
+
+    fill('setEmail',       d.einthusan_email);
+    // For masked fields — show badge if set, don't fill the input
+    const maskField = (id, val) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (!val || val.includes('\u2022') || val.includes('\u00b7') || val === '........') {
+        // Value is set on server but we don't expose it
+        // Keep as text type with no value so placeholder shows cleanly
+        el.type = 'text';
+        el.value = '';
+        el.classList.remove('masked');
+        el.placeholder = 'Leave blank to keep current value';
+      } else {
+        // Real value — show as masked password
+        el.type = 'password';
+        el.value = val;
+        el.classList.add('masked');
+      }
+    };
+
+    maskField('setPassword',   d.einthusan_password);
+    fill('setDownloadDir', d.download_dir);
+    fill('setPollInterval',String(d.poll_interval||''));
+    fill('setJellyfinUrl', d.jellyfin_url);
+    maskField('setJellyfinKey', d.jellyfin_api_key);
+    fill('setSeerrUrl',    d.seerr_url);
+    maskField('setSeerrKey',    d.seerr_api_key);
+    maskField('setTmdbKey',     d.tmdb_api_key);
+
+    const langEl = document.getElementById('setLang');
+    if (langEl && d.einthusan_language) langEl.value = d.einthusan_language;
+
+    // Show Einthusan status
+    const es = document.getElementById('einthusanConn');
+    if (es) es.innerHTML = d.logged_in !== undefined
+      ? (d.logged_in ? `<span class="conn-badge conn-ok">● Online</span>` : `<span class="conn-badge conn-err">● Offline</span>`)
+      : '';
+
+  } catch(e) { console.error('loadSettings error', e); }
+}
+
+// ── Save settings to .env ─────────────────────────────────────────────────────
+async function saveSettings() {
+  const get = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  const payload = {
+    einthusan_email:    get('setEmail'),
+    einthusan_password: get('setPassword'),
+    einthusan_language: get('setLang'),
+    download_dir:       get('setDownloadDir'),
+    poll_interval:      get('setPollInterval'),
+    jellyfin_url:       get('setJellyfinUrl'),
+    jellyfin_api_key:   get('setJellyfinKey'),
+    seerr_url:          get('setSeerrUrl'),
+    seerr_api_key:      get('setSeerrKey'),
+    tmdb_api_key:       get('setTmdbKey'),
+  };
+  try {
+    const r = await fetch('/api/settings', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload),
+    }).then(r=>r.json());
+    if (r.ok) {
+      showToast('Settings saved to .env — restart container to apply', 'success', 'Saved');
+      const ok = document.getElementById('saveOk');
+      if (ok) { ok.classList.add('show'); setTimeout(()=>ok.classList.remove('show'), 6000); }
+      // Commit pending theme to localStorage now that save succeeded
+      if (_pendingTheme) {
+        window._justSaved = true;
+        window.applyTheme(_pendingTheme);
+        _pendingTheme = null;
+      } else {
+        // Even if theme unchanged, mark as just saved so animation keeps running
+        window._justSaved = true;
+      }
+      // Reset dirty state — take new snapshot
+      _isDirty = false;
+      document.getElementById('saveBar').style.display = 'none';
+      snapshotValues();
+      _originalTheme  = window._currentTheme || localStorage.getItem('einthubot_theme') || 'amber';
+      _originalReveal = document.getElementById('revealToggle')?.checked || false;
+      // NOW actually apply the reveal preference
+      const revealToggle = document.getElementById('revealToggle');
+      if (revealToggle) await applyRevealAfterSave(revealToggle.checked);
+    } else {
+      showToast(r.error || 'Failed to save', 'error');
+    }
+  } catch(e) {
+    showToast('Save failed — check server logs', 'error');
+  }
+}
+
+// ── Update save bar position when sidebar collapses ───────────────────────────
+function updateSaveBar() {
+  const sb = document.getElementById('sidebar');
+  const bar = document.getElementById('saveBar');
+  if (sb && bar) {
+    const w = sb.classList.contains('collapsed') ? '60px' : '220px';
+    bar.style.left = w;
+  }
+}
+// Observe sidebar class changes
+const obs = new MutationObserver(updateSaveBar);
+const sidebarEl = document.getElementById('sidebar');
+if (sidebarEl) obs.observe(sidebarEl, { attributes:true, attributeFilter:['class'] });
+updateSaveBar();
+
+// ── Change detection ─────────────────────────────────────────────────────────
+let _originalValues = {};
+let _isDirty = false;
+let _originalTheme  = null;
+let _originalReveal = false;
+
+function snapshotValues() {
+  const ids = ['setEmail','setPassword','setLang','setDownloadDir','setPollInterval',
+               'setJellyfinUrl','setJellyfinKey','setSeerrUrl','setSeerrKey','setTmdbKey'];
+  _originalValues = {};
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) _originalValues[id] = el.value;
+  });
+  // Also snapshot theme and reveal state
+  _originalTheme  = window._currentTheme || localStorage.getItem('einthubot_theme') || 'amber';
+  _originalReveal = localStorage.getItem('einthubot_reveal') === '1';
+}
+
+function checkDirty() {
+  const ids = Object.keys(_originalValues);
+  const dirty = ids.some(id => {
+    const el = document.getElementById(id);
+    return el && el.value !== _originalValues[id];
+  });
+  if (dirty !== _isDirty) {
+    _isDirty = dirty;
+    const bar = document.getElementById('saveBar');
+    if (bar) bar.style.display = dirty ? 'flex' : 'none';
+  }
+}
+
+function attachChangeListeners() {
+  const ids = ['setEmail','setPassword','setLang','setDownloadDir','setPollInterval',
+               'setJellyfinUrl','setJellyfinKey','setSeerrUrl','setSeerrKey','setTmdbKey'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input',  checkDirty);
+      el.addEventListener('change', checkDirty);
+    }
+  });
+}
+
+function discardSettings() {
+  // Restore original snapshot values
+  Object.entries(_originalValues).forEach(([id, val]) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.value = val;
+      if (['setPassword','setJellyfinKey','setSeerrKey','setTmdbKey'].includes(id)) {
+        // Only mask if there's an actual value
+        if (el.value) {
+          el.type = 'password';
+          el.classList.add('masked');
+        } else {
+          el.type = 'text';
+          el.classList.remove('masked');
+          el.placeholder = 'Leave blank to keep current value';
+        }
+      }
+    }
+  });
+
+  // Revert theme preview back to saved theme
+  if (_originalTheme) {
+    window.applyTheme(_originalTheme);
+    _pendingTheme = null;
+    buildThemeGrid();
+  }
+
+  // Restore original reveal toggle state
+  const toggle = document.getElementById('revealToggle');
+  if (toggle) {
+    const wasOn = localStorage.getItem('einthubot_reveal') === '1';
+    if (toggle.checked !== _originalReveal) {
+      toggle.checked = _originalReveal;
+      if (!_originalReveal) handleRevealToggle(false);
+    }
+  }
+
+  _isDirty = false;
+  document.getElementById('saveBar').style.display = 'none';
+  showToast('Changes discarded', 'info');
+}
+
+// ── Reveal toggle ────────────────────────────────────────────────────────────
+const MASKED_FIELDS = [
+  { id:'setPassword',   key:'einthusan_password' },
+  { id:'setJellyfinKey',key:'jellyfin_api_key' },
+  { id:'setSeerrKey',   key:'seerr_api_key' },
+  { id:'setTmdbKey',    key:'tmdb_api_key' },
+];
+
+let _realValues = {};
+let _revealLoaded = false;
+
+async function handleRevealToggle(checked) {
+  const label  = document.getElementById('revealLabel');
+  const hint   = document.getElementById('revealHint');
+  const status = document.getElementById('revealStatus');
+  _isDirty = true;
+  const bar = document.getElementById('saveBar');
+  if (bar) bar.style.display = 'flex';
+  if (checked) {
+    label.textContent       = 'Show sensitive values';
+    hint.textContent        = 'Save settings to activate';
+    status.style.display    = 'block';
+    status.style.background = 'rgba(240,151,30,0.15)';
+    status.style.color      = '#f0971e';
+    status.textContent      = '⚠ Save settings to activate';
+  } else {
+    label.textContent       = 'Show sensitive values';
+    hint.textContent        = 'Save settings to apply';
+    status.style.display    = 'block';
+    status.style.background = 'rgba(240,151,30,0.15)';
+    status.style.color      = '#f0971e';
+    status.textContent      = '⚠ Save settings to apply';
+  }
+}
+
+
+// ── Apply reveal after save ───────────────────────────────────────────────────
+async function applyRevealAfterSave(checked) {
+  const label  = document.getElementById('revealLabel');
+  const hint   = document.getElementById('revealHint');
+  const status = document.getElementById('revealStatus');
+
+  localStorage.setItem('einthubot_reveal', checked ? '1' : '0');
+
+  if (checked) {
+    if (!_revealLoaded) {
+      if (status) {
+        status.style.display    = 'block';
+        status.style.background = 'rgba(91,141,238,0.15)';
+        status.style.color      = '#5b8dee';
+        status.textContent      = 'Loading from server…';
+      }
+      try {
+        const d = await fetch('/api/settings/reveal').then(r=>r.json());
+        if (d.ok) { _realValues = d.values; _revealLoaded = true; }
+        else throw new Error(d.error || 'Failed');
+      } catch(e) {
+        if (status) {
+          status.textContent      = 'Failed to load values';
+          status.style.background = 'rgba(224,59,59,0.15)';
+          status.style.color      = '#e03b3b';
+        }
+        const t = document.getElementById('revealToggle');
+        if (t) t.checked = false;
+        localStorage.setItem('einthubot_reveal', '0');
+        return;
+      }
+    }
+    // Fill fields masked — eye button reveals each one
+    MASKED_FIELDS.forEach(f => {
+      const el = document.getElementById(f.id);
+      if (!el) return;
+      const val = _realValues[f.key];
+      if (val) {
+        el.value      = val;
+        el.type       = 'password';
+        el.classList.add('masked');
+        el.placeholder = '';
+        const wrap = el.closest('.input-wrap');
+        if (wrap) {
+          const eye = wrap.querySelector('.eye-btn');
+          if (eye) { eye.style.opacity = '1'; eye.style.pointerEvents = 'auto'; eye.title = ''; }
+        }
+        const badge = el.closest('.setting-row')?.querySelector('span[style*="Set"]');
+        if (badge) badge.remove();
+      }
+    });
+    if (label) label.textContent = 'Sensitive values ready';
+    if (hint)  hint.textContent  = 'Click the eye icon next to each field to reveal';
+    if (status) {
+      status.style.display    = 'block';
+      status.style.background = 'rgba(59,212,122,0.15)';
+      status.style.color      = '#3bd47a';
+      status.textContent      = '✓ Eye buttons unlocked';
+    }
+  } else {
+    // Hide and lock eye buttons — restore to text type so placeholder shows cleanly
+    MASKED_FIELDS.forEach(f => {
+      const el = document.getElementById(f.id);
+      if (!el) return;
+      el.value = '';
+      el.type = 'text';
+      el.classList.remove('masked');
+      el.placeholder = 'Leave blank to keep current value';
+      const wrap = el.closest('.input-wrap');
+      if (wrap) {
+        const eye = wrap.querySelector('.eye-btn');
+        if (eye) { eye.style.opacity = '0.3'; eye.style.pointerEvents = 'none'; eye.title = 'Enable show sensitive values first'; }
+      }
+    });
+    if (label)  label.textContent = 'Show sensitive values';
+    if (hint)   hint.textContent  = 'Toggle to reveal passwords and API keys';
+    if (status) status.style.display = 'none';
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+window.init_settings = async function() {
+  buildThemeGrid();
+  await loadSettings();
+  testConn('jellyfin');
+  testConn('seerr');
+  // Snapshot initial values and attach change listeners
+  snapshotValues();
+  attachChangeListeners();
+  // Disable eye buttons until reveal toggle is on
+  MASKED_FIELDS.forEach(f => {
+    const el = document.getElementById(f.id);
+    if (!el) return;
+    const wrap = el.closest('.input-wrap');
+    if (wrap) {
+      const eyeBtn = wrap.querySelector('.eye-btn');
+      if (eyeBtn) {
+        eyeBtn.style.opacity = '0.3';
+        eyeBtn.style.pointerEvents = 'none';
+        eyeBtn.title = 'Enable "Show sensitive values" first';
+      }
+    }
+  });
+
+  // Restore last saved toggle state and apply it directly (no pending state on init)
+  const wasRevealed = localStorage.getItem('einthubot_reveal') === '1';
+  const toggle = document.getElementById('revealToggle');
+  if (toggle) {
+    toggle.checked = wasRevealed;
+    if (wasRevealed) await applyRevealAfterSave(true);
+  }
+};
+</script>

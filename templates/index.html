@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EinthuBot</title>
+  <style>
+    :root {
+      --bg:#0a0a0f; --surface:#12121c; --surface2:#1a1a28;
+      --border:#1e1e30; --border2:#2a2a40;
+      --accent:#f0971e; --text:#e8e6f0; --muted:#5a5a7a; --muted2:#3d3d5c;
+      --success:#3bd47a; --error:#e03b3b; --info:#5b8dee; --radius:10px; --sb:220px;
+    }
+    *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'Inter','Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; display:flex; overflow:hidden; }
+
+    /* ── Sidebar ── */
+    #sidebar { width:var(--sb); min-width:var(--sb); background:#0a0a0f; border-right:0.5px solid var(--border); display:flex; flex-direction:column; height:100vh; position:sticky; top:0; transition:width 0.25s ease,min-width 0.25s ease; overflow:hidden; z-index:50; flex-shrink:0; }
+    #sidebar.collapsed { width:60px; min-width:60px; }
+
+    .sb-logo { display:flex; align-items:center; gap:10px; padding:18px 14px 14px; border-bottom:0.5px solid var(--border); flex-shrink:0; overflow:hidden; }
+    .sb-logo-icon { width:34px; height:34px; border-radius:9px; background:var(--accent); display:grid; place-items:center; font-size:18px; flex-shrink:0; }
+    .sb-logo-text { overflow:hidden; white-space:nowrap; }
+    .sb-logo-name { font-size:14px; font-weight:600; color:#fff; }
+    .sb-logo-status { font-size:10px; color:var(--success); margin-top:2px; }
+    .sb-logo-status.offline { color:var(--error); }
+    #sidebar.collapsed .sb-logo-text { display:none; }
+
+    .sb-body { flex:1; overflow-y:auto; overflow-x:hidden; padding:10px 8px; display:flex; flex-direction:column; gap:2px; }
+    .sb-body::-webkit-scrollbar { width:0; }
+
+    .sb-section { font-size:10px; font-weight:600; color:var(--muted2); text-transform:uppercase; letter-spacing:.08em; padding:0 8px; margin:8px 0 3px; white-space:nowrap; transition:opacity 0.2s; }
+    #sidebar.collapsed .sb-section { opacity:0; pointer-events:none; }
+
+    .nav-item { display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:8px; cursor:pointer; border:0.5px solid transparent; transition:background 0.15s; position:relative; overflow:hidden; }
+    .nav-item:hover { background:var(--surface2); }
+    .nav-item.active { background:rgba(240,151,30,0.1); border-color:rgba(240,151,30,0.2); }
+    .nav-icon { width:20px; height:20px; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:var(--muted); transition:color 0.15s; }
+    .nav-icon svg { width:18px; height:18px; stroke:currentColor; }
+    .nav-item.active .nav-icon { color:var(--accent); }
+    .btn-accent, .btn-approve { background: var(--accent-btn-bg, var(--accent)) !important; }
+    .nav-label { font-size:13px; color:var(--muted); white-space:nowrap; overflow:hidden; transition:color 0.15s,max-width 0.25s,opacity 0.2s; max-width:160px; }
+    .nav-item.active .nav-label { color:var(--accent); font-weight:500; }
+    #sidebar.collapsed .nav-label { max-width:0; opacity:0; }
+    .nav-badge { margin-left:auto; background:var(--accent); color:#000; font-size:10px; font-weight:700; padding:2px 7px; border-radius:10px; flex-shrink:0; transition:opacity 0.2s,max-width 0.25s; max-width:40px; overflow:hidden; }
+    #sidebar.collapsed .nav-badge { opacity:0; max-width:0; padding:0; }
+
+    /* Active download mini-card */
+    .sb-dl { flex-shrink:0; padding:10px 8px; border-top:0.5px solid var(--border); }
+    .sb-dl-card { background:var(--surface2); border:0.5px solid rgba(240,151,30,0.25); border-radius:10px; padding:10px; }
+    .sb-dl-row { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
+    .sb-dl-thumb { width:30px; height:42px; background:var(--border2); border-radius:5px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:14px; overflow:hidden; }
+    .sb-dl-info { flex:1; min-width:0; }
+    .sb-dl-title { font-size:10px; font-weight:500; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .sb-dl-size  { font-size:9px; color:var(--muted); margin-top:2px; }
+    .sb-dl-btns  { display:flex; gap:4px; }
+    .sb-dl-btn   { width:24px; height:24px; border-radius:5px; background:var(--border2); border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--muted); }
+    .sb-dl-btn svg { width:12px; height:12px; stroke:currentColor; }
+    .sb-dl-bar  { background:var(--border2); border-radius:3px; height:3px; overflow:hidden; }
+    .sb-dl-fill { height:3px; background:var(--accent); border-radius:3px; transition:width 0.5s; }
+    #sidebar.collapsed .sb-dl { display:none; }
+
+    /* Collapse toggle */
+    .sb-toggle { flex-shrink:0; padding:10px 8px; border-top:0.5px solid var(--border); }
+    .sb-toggle-btn { width:100%; display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:8px; cursor:pointer; border:0.5px solid var(--border2); background:var(--surface); color:var(--muted); font-size:13px; transition:background 0.15s; }
+    .sb-toggle-btn:hover { background:var(--surface2); }
+    .sb-toggle-icon { width:20px; height:20px; flex-shrink:0; display:flex; align-items:center; justify-content:center; transition:transform 0.25s; }
+    .sb-toggle-icon svg { width:16px; height:16px; stroke:currentColor; }
+    #sidebar.collapsed .sb-toggle-icon { transform:rotate(180deg); }
+    .sb-toggle-label { white-space:nowrap; overflow:hidden; transition:opacity 0.2s,max-width 0.25s; max-width:160px; }
+    #sidebar.collapsed .sb-toggle-label { opacity:0; max-width:0; }
+
+    /* ── Main ── */
+    #main { flex:1; display:flex; flex-direction:column; height:100vh; overflow:hidden; min-width:0; background:var(--bg); transition:background 0.3s; }
+    #session-banner { background:rgba(224,59,59,0.12); border-bottom:0.5px solid rgba(224,59,59,0.3); padding:9px 24px; display:none; align-items:center; gap:10px; flex-shrink:0; }
+    #session-banner.show { display:flex; }
+    #session-banner span { font-size:13px; color:#f4a0a0; flex:1; }
+    .banner-btn { background:var(--error); color:#fff; border:none; border-radius:7px; padding:5px 14px; font-size:12px; font-weight:600; cursor:pointer; }
+
+    /* Page container */
+    #page-container { flex:1; overflow-y:auto; position:relative; background:var(--bg); transition:background 0.3s; }
+    .page-loading { display:flex; align-items:center; justify-content:center; height:200px; color:var(--muted); font-size:13px; }
+    .spin { display:inline-block; width:15px; height:15px; border:2px solid var(--border2); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; vertical-align:middle; margin-right:6px; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* Toast */
+    #toast-container { position:fixed; bottom:24px; right:24px; display:flex; flex-direction:column; gap:8px; z-index:9999; }
+    .toast { background:var(--surface); border:0.5px solid var(--border2); border-radius:var(--radius); padding:12px 16px; display:flex; align-items:center; gap:12px; min-width:260px; max-width:360px; transform:translateX(120%); opacity:0; transition:all 0.3s ease; }
+    .toast.show { transform:translateX(0); opacity:1; }
+    .toast-thumb-ph { width:34px; height:48px; border-radius:5px; background:var(--border2); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:14px; }
+    .toast-body { flex:1; min-width:0; }
+    .toast-title { font-size:12px; font-weight:600; margin-bottom:2px; }
+    .toast-msg   { font-size:11px; color:var(--muted); }
+    .toast-icon  { flex-shrink:0; }
+    .toast-icon svg { width:18px; height:18px; stroke:currentColor; }
+    .t-success .toast-icon { color:var(--success); }
+    .t-error   .toast-icon { color:var(--error); }
+    .t-info    .toast-icon { color:var(--info); }
+    .toast-close { background:none; border:none; cursor:pointer; color:var(--muted); font-size:14px; padding:0; flex-shrink:0; }
+
+    ::-webkit-scrollbar { width:5px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:var(--border2); border-radius:3px; }
+  </style>
+</head>
+<body>
+
+<!-- Animated background canvas -->
+<canvas id="animBg" style="position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:0;transition:opacity 0.5s;"></canvas>
+
+<aside id="sidebar" style="position:relative;z-index:1;">
+  <div class="sb-logo">
+    <div class="sb-logo-icon">🎬</div>
+    <div class="sb-logo-text">
+      <div class="sb-logo-name">EinthuBot</div>
+      <div class="sb-logo-status" id="logoStatus">● Connecting…</div>
+    </div>
+  </div>
+
+  <div class="sb-body">
+    <div class="sb-section">Discover</div>
+    <div class="nav-item active" data-page="home">
+      <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12L3 12L12 3L21 12L19 12"/><path d="M5 12V19C5 19.6 5.4 20 6 20H9V16C9 15.4 9.4 15 10 15H14C14.6 15 15 15.4 15 16V20H18C18.6 20 19 19.6 19 19V12"/></svg></div>
+      <span class="nav-label">Home</span>
+    </div>
+    <div class="nav-item" data-page="search">
+      <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7"/><line x1="21" y1="21" x2="15" y2="15"/></svg></div>
+      <span class="nav-label">Search</span>
+    </div>
+
+    <div class="sb-section">Manage</div>
+    <div class="nav-item" data-page="requests">
+      <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="3,14 7,14 8,17 16,17 17,14 21,14"/></svg></div>
+      <span class="nav-label">Requests</span>
+      <span class="nav-badge" id="reqBadge" style="display:none">0</span>
+    </div>
+    <div class="nav-item" data-page="downloads">
+      <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><polyline points="7,11 12,16 17,11"/><line x1="12" y1="4" x2="12" y2="16"/></svg></div>
+      <span class="nav-label">Downloads</span>
+      <span class="nav-badge" id="dlBadge" style="display:none;background:var(--info);color:#fff;">0</span>
+    </div>
+    <div class="nav-item" data-page="library">
+      <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M8 3l4 4 4-4"/></svg></div>
+      <span class="nav-label">Library</span>
+      <span class="nav-badge" id="libBadge" style="display:none;background:var(--info);color:#fff;">0</span>
+    </div>
+    <div class="nav-item" data-page="activity">
+      <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg></div>
+      <span class="nav-label">Activity</span>
+    </div>
+    <div class="nav-item" data-page="settings">
+      <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
+      <span class="nav-label">Settings</span>
+    </div>
+  </div>
+
+  <!-- Active download mini-card -->
+  <div class="sb-dl" id="sbDl" style="display:none;">
+    <div class="sb-dl-card">
+      <div class="sb-dl-row">
+        <div class="sb-dl-thumb" id="sbDlThumb">🎬</div>
+        <div class="sb-dl-info">
+          <div class="sb-dl-title" id="sbDlTitle">—</div>
+          <div class="sb-dl-size"  id="sbDlSize">—</div>
+        </div>
+        <div class="sb-dl-btns">
+          <button class="sb-dl-btn" id="sbDlPause" title="Pause/Resume">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+          </button>
+          <button class="sb-dl-btn" id="sbDlCancel" title="Cancel">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="sb-dl-bar"><div class="sb-dl-fill" id="sbDlFill" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <div class="sb-toggle">
+    <button class="sb-toggle-btn" onclick="toggleSidebar()">
+      <div class="sb-toggle-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="20" y1="12" x2="10" y2="12"/><polyline points="15,7 10,12 15,17"/><line x1="4" y1="5" x2="4" y2="19"/></svg>
+      </div>
+      <span class="sb-toggle-label">Collapse</span>
+    </button>
+  </div>
+</aside>
+
+<div id="main" style="position:relative;z-index:1;">
+  <div id="session-banner">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#e03b3b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span>Einthusan session expired — downloads will fail until you re-login.</span>
+    <button class="banner-btn" onclick="retryLogin()">Re-login now</button>
+  </div>
+  <div id="page-container">
+    <div class="page-loading"><span class="spin"></span> Loading…</div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+// ── Theme system ─────────────────────────────────────────────────────────────
+const THEMES = {
+  amber:    { accent:'#f0971e', accentRgb:'240,151,30',  bg:'#0a0a0f', surface:'#12121c', surface2:'#1a1a28', border:'#1e1e30', border2:'#2a2a40', tint:'rgba(240,151,30,0.1)', tintBorder:'rgba(240,151,30,0.2)', gradient:false },
+  ocean:    { accent:'#3b82f6', accentRgb:'59,130,246',  bg:'#0a0f1a', surface:'#0d1420', surface2:'#111c2e', border:'#162040', border2:'#1e2e50', tint:'rgba(59,130,246,0.1)',  tintBorder:'rgba(59,130,246,0.2)',  gradient:false },
+  nebula:   { accent:'#a855f7', accentRgb:'168,85,247',  bg:'#0d0a1a', surface:'#110d20', surface2:'#18112e', border:'#1e1240', border2:'#281850', tint:'rgba(168,85,247,0.1)',  tintBorder:'rgba(168,85,247,0.2)',  gradient:false },
+  matrix:   { accent:'#22c55e', accentRgb:'34,197,94',   bg:'#0a140a', surface:'#0d1a0d', surface2:'#112011', border:'#162816', border2:'#1e3a1e', tint:'rgba(34,197,94,0.1)',   tintBorder:'rgba(34,197,94,0.2)',   gradient:false },
+  crimson:  { accent:'#ef4444', accentRgb:'239,68,68',   bg:'#140a0a', surface:'#1a0d0d', surface2:'#241010', border:'#301414', border2:'#3e1a1a', tint:'rgba(239,68,68,0.1)',   tintBorder:'rgba(239,68,68,0.2)',   gradient:false },
+  teal:     { accent:'#14b8a6', accentRgb:'20,184,166',  bg:'#0a1414', surface:'#0d1a1a', surface2:'#112020', border:'#162828', border2:'#1e3838', tint:'rgba(20,184,166,0.1)',  tintBorder:'rgba(20,184,166,0.2)',  gradient:false },
+  rose:     { accent:'#f43f5e', accentRgb:'244,63,94',   bg:'#140a10', surface:'#1a0d15', surface2:'#24101c', border:'#301428', border2:'#3e1a34', tint:'rgba(244,63,94,0.1)',   tintBorder:'rgba(244,63,94,0.2)',   gradient:false },
+  light:    { accent:'#1a1a2e', accentRgb:'26,26,46',    bg:'#f0f0f8', surface:'#ffffff', surface2:'#f4f4fc', border:'#ddddf0', border2:'#c8c8e0', tint:'rgba(26,26,46,0.08)',   tintBorder:'rgba(26,26,46,0.15)',   gradient:false, light:true },
+  midnight: { accent:'#818cf8', accentRgb:'129,140,248', bg:'#050508', surface:'#0a0a12', surface2:'#0f0f1c', border:'#141428', border2:'#1e1e38', tint:'rgba(129,140,248,0.1)', tintBorder:'rgba(129,140,248,0.2)', gradient:false },
+  sunset:   { accent:'#fb923c', accentRgb:'251,146,60',  bg:'#140a05', surface:'#1a0f08', surface2:'#22140c', border:'#2e1a10', border2:'#3c2216', tint:'rgba(251,146,60,0.1)',  tintBorder:'rgba(251,146,60,0.2)',  gradient:false },
+  slate:    { accent:'#94a3b8', accentRgb:'148,163,184', bg:'#0a0c10', surface:'#0e1018', surface2:'#141820', border:'#1c2030', border2:'#242840', tint:'rgba(148,163,184,0.1)', tintBorder:'rgba(148,163,184,0.2)', gradient:false },
+  sakura:   { accent:'#f9a8d4', accentRgb:'249,168,212', bg:'#140a10', surface:'#1a0d18', surface2:'#221020', border:'#2e1428', border2:'#3c1a34', tint:'rgba(249,168,212,0.1)', tintBorder:'rgba(249,168,212,0.2)', gradient:false },
+  aurora:       { accent:'#c084fc', accentRgb:'192,132,252', bg:'#06060a', surface:'#0c0c14', surface2:'#12121e', border:'#18183a', border2:'#22226a', tint:'rgba(192,132,252,0.1)', tintBorder:'rgba(192,132,252,0.2)', gradient:true, gradientFrom:'#c084fc', gradientTo:'#818cf8', animated:'aurora' },
+  nebula_storm: { accent:'#7c3aed', accentRgb:'124,58,237',   bg:'#060612', surface:'#0a0a1a', surface2:'#12122a', border:'#1a1a3a', border2:'#22224a', tint:'rgba(124,58,237,0.15)', tintBorder:'rgba(124,58,237,0.3)', gradient:true, gradientFrom:'#7c3aed', gradientTo:'#0ea5e9', animated:'nebula_storm' },
+  ember:        { accent:'#ea580c', accentRgb:'234,88,12',    bg:'#0a0500', surface:'#150800', surface2:'#1e0e00', border:'#2a1000', border2:'#3a1800', tint:'rgba(234,88,12,0.15)',  tintBorder:'rgba(234,88,12,0.3)',  gradient:true, gradientFrom:'#ea580c', gradientTo:'#dc2626', animated:'ember' },
+  arctic:       { accent:'#0ea5e9', accentRgb:'14,165,233',   bg:'#020b14', surface:'#051520', surface2:'#0a2030', border:'#0a2a3a', border2:'#0e3a50', tint:'rgba(14,165,233,0.15)', tintBorder:'rgba(14,165,233,0.3)', gradient:true, gradientFrom:'#0ea5e9', gradientTo:'#06b6d4', animated:'arctic' },
+  void:         { accent:'#6d28d9', accentRgb:'109,40,217',   bg:'#020204', surface:'#08080e', surface2:'#10101a', border:'#18181c', border2:'#28283a', tint:'rgba(109,40,217,0.15)', tintBorder:'rgba(109,40,217,0.3)', gradient:true, gradientFrom:'#6d28d9', gradientTo:'#4f46e5', animated:'void' },
+  neon_rain:    { accent:'#00f5ff', accentRgb:'0,245,255',    bg:'#030610', surface:'#080e1a', surface2:'#0e1628', border:'#0a1a2a', border2:'#0e2438', tint:'rgba(0,245,255,0.12)',  tintBorder:'rgba(0,245,255,0.25)', gradient:true, gradientFrom:'#00f5ff', gradientTo:'#7c3aed', animated:'neon_rain' },
+  lava_lamp:    { accent:'#d946ef', accentRgb:'217,70,239',   bg:'#06030a', surface:'#0e0614', surface2:'#160a1e', border:'#1a0a2a', border2:'#240e38', tint:'rgba(217,70,239,0.15)', tintBorder:'rgba(217,70,239,0.3)', gradient:true, gradientFrom:'#d946ef', gradientTo:'#7c3aed', animated:'lava_lamp' },
+  grid_pulse:   { accent:'#00ff88', accentRgb:'0,255,136',    bg:'#020a04', surface:'#060e08', surface2:'#0a1410', border:'#0a1e0c', border2:'#0e2812', tint:'rgba(0,255,136,0.12)',  tintBorder:'rgba(0,255,136,0.25)', gradient:true, gradientFrom:'#00ff88', gradientTo:'#00cc44', animated:'grid_pulse' },
+};
+
+window.applyTheme = function(name) {
+  const t = THEMES[name] || THEMES.amber;
+  const r = document.documentElement.style;
+  r.setProperty('--accent',    t.accent);
+  r.setProperty('--bg',        t.bg);
+  r.setProperty('--surface',   t.surface);
+  r.setProperty('--surface2',  t.surface2);
+  r.setProperty('--border',    t.border);
+  r.setProperty('--border2',   t.border2);
+  r.setProperty('--theme-tint',        t.tint);
+  r.setProperty('--theme-tint-border', t.tintBorder);
+  if (t.gradient) {
+    r.setProperty('--accent-gradient', `linear-gradient(135deg,${t.gradientFrom},${t.gradientTo})`);
+    r.setProperty('--accent-btn-bg',   `linear-gradient(135deg,${t.gradientFrom},${t.gradientTo})`);
+  } else {
+    r.setProperty('--accent-gradient', t.accent);
+    r.setProperty('--accent-btn-bg',   t.accent);
+  }
+  // Light mode text adjustments
+  if (t.light) {
+    r.setProperty('--text',  '#1a1a2e');
+    r.setProperty('--muted', '#6060a0');
+    r.setProperty('--muted2','#9090c0');
+  } else {
+    r.setProperty('--text',  '#e8e6f0');
+    r.setProperty('--muted', '#5a5a7a');
+    r.setProperty('--muted2','#3d3d5c');
+  }
+  localStorage.setItem('einthubot_theme', name);
+  window._currentTheme = name;
+  document.body.style.background = t.bg;
+  document.body.style.color = t.light ? '#1a1a2e' : '#e8e6f0';
+  const pc = document.getElementById('page-container');
+  if (pc) pc.style.background = 'transparent';
+  const sb = document.getElementById('sidebar');
+  if (sb) sb.style.background = t.animated ? 'transparent' : t.bg;
+  const mn = document.getElementById('main');
+  if (mn) mn.style.background = 'transparent';
+  // Start or stop animation
+  if (t.animated) {
+    window.startAnimation && window.startAnimation(t.animated);
+  } else {
+    window.stopAnimation && window.stopAnimation();
+  }
+};
+
+// Preview a theme without saving to localStorage
+window.applyThemePreview = function(name) {
+  const t = THEMES[name] || THEMES.amber;
+  const r = document.documentElement.style;
+  r.setProperty('--accent',    t.accent);
+  r.setProperty('--bg',        t.bg);
+  r.setProperty('--surface',   t.surface);
+  r.setProperty('--surface2',  t.surface2);
+  r.setProperty('--border',    t.border);
+  r.setProperty('--border2',   t.border2);
+  r.setProperty('--theme-tint',        t.tint);
+  r.setProperty('--theme-tint-border', t.tintBorder);
+  if (t.gradient) {
+    r.setProperty('--accent-gradient', `linear-gradient(135deg,${t.gradientFrom},${t.gradientTo})`);
+    r.setProperty('--accent-btn-bg',   `linear-gradient(135deg,${t.gradientFrom},${t.gradientTo})`);
+  } else {
+    r.setProperty('--accent-gradient', t.accent);
+    r.setProperty('--accent-btn-bg',   t.accent);
+  }
+  if (t.light) {
+    r.setProperty('--text',  '#1a1a2e');
+    r.setProperty('--muted', '#6060a0');
+    r.setProperty('--muted2','#9090c0');
+  } else {
+    r.setProperty('--text',  '#e8e6f0');
+    r.setProperty('--muted', '#5a5a7a');
+    r.setProperty('--muted2','#3d3d5c');
+  }
+  // Note: does NOT save to localStorage or update _currentTheme
+  document.body.style.background = t.bg;
+  document.body.style.color = t.light ? '#1a1a2e' : '#e8e6f0';
+  const pc = document.getElementById('page-container');
+  if (pc) pc.style.background = 'transparent';
+  const sb = document.getElementById('sidebar');
+  if (sb) sb.style.background = t.animated ? 'transparent' : t.bg;
+  const mn = document.getElementById('main');
+  if (mn) mn.style.background = 'transparent';
+  if (t.animated) {
+    window.startAnimation && window.startAnimation(t.animated);
+  } else {
+    window.stopAnimation && window.stopAnimation();
+  }
+};
+
+// Apply saved theme — deferred so animation engine is ready first
+window._pendingInitTheme = localStorage.getItem('einthubot_theme') || 'amber';
+// Apply CSS vars immediately (no animation yet)
+(function() {
+  const saved = window._pendingInitTheme;
+  const t = THEMES[saved] || THEMES.amber;
+  const r = document.documentElement.style;
+  r.setProperty('--accent',    t.accent);
+  r.setProperty('--bg',        t.bg);
+  r.setProperty('--surface',   t.surface);
+  r.setProperty('--surface2',  t.surface2);
+  r.setProperty('--border',    t.border);
+  r.setProperty('--border2',   t.border2);
+  r.setProperty('--theme-tint',        t.tint);
+  r.setProperty('--theme-tint-border', t.tintBorder);
+  if (t.gradient) {
+    r.setProperty('--accent-gradient', `linear-gradient(135deg,${t.gradientFrom},${t.gradientTo})`);
+    r.setProperty('--accent-btn-bg',   `linear-gradient(135deg,${t.gradientFrom},${t.gradientTo})`);
+  } else {
+    r.setProperty('--accent-gradient', t.accent);
+    r.setProperty('--accent-btn-bg',   t.accent);
+  }
+  if (t.light) {
+    r.setProperty('--text',  '#1a1a2e');
+    r.setProperty('--muted', '#6060a0');
+    r.setProperty('--muted2','#9090c0');
+  } else {
+    r.setProperty('--text',  '#e8e6f0');
+    r.setProperty('--muted', '#5a5a7a');
+    r.setProperty('--muted2','#3d3d5c');
+  }
+  document.body.style.background = t.bg;
+  window._currentTheme = saved;
+})();
+
+// ── Globals shared across all partials ────────────────────────────────────────
+window.TMDB    = 'https://image.tmdb.org/t/p/';
+window._tmdbKey = null;
+
+// ── Sidebar collapse ──────────────────────────────────────────────────────────
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  sb.classList.toggle('collapsed');
+  localStorage.setItem('sb_col', sb.classList.contains('collapsed') ? '1' : '0');
+}
+if (localStorage.getItem('sb_col') === '1') {
+  document.getElementById('sidebar').classList.add('collapsed');
+}
+
+// ── Toast (global, available to all partials) ─────────────────────────────────
+window.showToast = function(msg, type='info', title='') {
+  const icons = {
+    success: '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="9,12 11,14 15,10"/></svg>',
+    error:   '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+    info:    '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
+  };
+  const t = document.createElement('div');
+  t.className = `toast t-${type}`;
+  t.innerHTML = `
+    <div class="toast-thumb-ph">🎬</div>
+    <div class="toast-body">${title ? `<div class="toast-title">${title}</div>` : ''}<div class="toast-msg">${msg}</div></div>
+    <div class="toast-icon">${icons[type]||icons.info}</div>
+    <button class="toast-close" onclick="this.closest('.toast').remove()">✕</button>`;
+  document.getElementById('toast-container').appendChild(t);
+  requestAnimationFrame(() => t.classList.add('show'));
+  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 400); }, 4500);
+};
+
+// ── TMDB key ──────────────────────────────────────────────────────────────────
+window.getTmdbKey = async function() {
+  if (window._tmdbKey !== null) return window._tmdbKey;
+  try { const s = await fetch('/api/status').then(r=>r.json()); window._tmdbKey = s.tmdb_api_key || ''; }
+  catch(e) { window._tmdbKey = ''; }
+  return window._tmdbKey;
+};
+
+// ── Escape html ───────────────────────────────────────────────────────────────
+window.esc = function(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+};
+
+// ── Status & session banner ───────────────────────────────────────────────────
+async function loadStatus() {
+  try {
+    const d = await fetch('/api/status').then(r=>r.json());
+    if (d.tmdb_api_key) window._tmdbKey = d.tmdb_api_key;
+    const st = document.getElementById('logoStatus');
+    const banner = document.getElementById('session-banner');
+    if (d.logged_in) {
+      st.textContent = '● Online · Premium';
+      st.className = 'sb-logo-status';
+      banner.classList.remove('show');
+    } else {
+      st.textContent = '● Session expired';
+      st.className = 'sb-logo-status offline';
+      banner.classList.add('show');
+    }
+  } catch(e) {}
+}
+async function retryLogin() {
+  showToast('Retrying login…', 'info');
+  await fetch('/api/retry_login', { method: 'POST' });
+  setTimeout(loadStatus, 1500);
+}
+
+// ── Sidebar download mini-card (global) ───────────────────────────────────────
+window.updateSidebarDl = function(downloads) {
+  const active = downloads.filter(d => ['downloading','queued','paused','pausing'].includes(d.status));
+  const dl = active.find(d => d.status === 'downloading') || active[0];
+  const sbDl = document.getElementById('sbDl');
+  const dlBadge = document.getElementById('dlBadge');
+
+  dlBadge.style.display = active.length ? 'inline' : 'none';
+  dlBadge.textContent = active.length;
+
+  if (dl) {
+    sbDl.style.display = 'block';
+    document.getElementById('sbDlTitle').textContent = dl.title || '';
+    document.getElementById('sbDlSize').textContent  = `${dl.size_mb||0} / ${dl.total_mb||0} MB · ${dl.progress||0}%`;
+    document.getElementById('sbDlFill').style.width  = `${dl.progress||0}%`;
+    const pb = document.getElementById('sbDlPause');
+    pb.innerHTML = dl.status === 'paused'
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5,3 19,12 5,21 5,3"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+    pb.onclick = async () => {
+      await fetch(`/api/${dl.status==='paused'?'resume':'pause'}/${dl.id}`, {method:'POST'});
+      window._refreshDownloads && window._refreshDownloads();
+    };
+    document.getElementById('sbDlCancel').onclick = async () => {
+      await fetch(`/api/cancel/${dl.id}`, {method:'POST'});
+      window._refreshDownloads && window._refreshDownloads();
+    };
+  } else {
+    sbDl.style.display = 'none';
+  }
+};
+
+// ── Page loader ───────────────────────────────────────────────────────────────
+let currentPage = null;
+let prevPage    = null;
+let dlPollInterval = null;
+
+async function loadPage(name) {
+  if (currentPage === name) return;
+  prevPage    = currentPage;
+  // When leaving settings, reapply the saved theme
+  // Skip if we just saved (flag set by saveSettings)
+  if (prevPage === 'settings' && !window._justSaved) {
+    const saved = localStorage.getItem('einthubot_theme') || 'amber';
+    window.applyTheme(saved);
+  }
+  window._justSaved = false;
+  currentPage = name;
+
+  // Clear any previous polling
+  if (dlPollInterval) { clearInterval(dlPollInterval); dlPollInterval = null; }
+
+  // Update nav
+  document.querySelectorAll('.nav-item').forEach(n => {
+    n.classList.toggle('active', n.dataset.page === name);
+  });
+
+  // Show loading state
+  const container = document.getElementById('page-container');
+  container.innerHTML = '<div class="page-loading"><span class="spin"></span> Loading…</div>';
+
+  // Fetch the partial
+  try {
+    const html = await fetch(`/partials/${name}`).then(r => r.text());
+    container.innerHTML = html;
+
+    // Re-execute all script tags in the injected HTML
+    const scripts = container.querySelectorAll('script');
+    for (const oldScript of scripts) {
+      const newScript = document.createElement('script');
+      newScript.textContent = oldScript.textContent;
+      document.body.appendChild(newScript);
+      document.body.removeChild(newScript);
+    }
+
+    // Run the partial's init function if it exists
+    if (typeof window[`init_${name}`] === 'function') {
+      window[`init_${name}`]();
+    }
+  } catch(e) {
+    container.innerHTML = `<div style="padding:40px;text-align:center;color:var(--muted)">Failed to load page</div>`;
+  }
+}
+
+// ── Nav click handlers ────────────────────────────────────────────────────────
+document.querySelectorAll('.nav-item').forEach(el => {
+  el.addEventListener('click', () => loadPage(el.dataset.page));
+});
+
+// ── Badge updaters called from partials ───────────────────────────────────────
+window.setReqBadge = function(n) {
+  const b = document.getElementById('reqBadge');
+  b.style.display = n > 0 ? 'inline' : 'none';
+  b.textContent = n;
+};
+window.setLibBadge = function(n) {
+  const b = document.getElementById('libBadge');
+  b.style.display = n > 0 ? 'inline' : 'none';
+  b.textContent = n;
+};
+
+// ── Background download poll (keeps sidebar card updated always) ──────────────
+async function pollDownloads() {
+  try {
+    const data = await fetch('/api/downloads').then(r=>r.json());
+    window.updateSidebarDl(data);
+    // If downloads page is open, refresh it too
+    if (currentPage === 'downloads' && typeof window.init_downloads === 'function') {
+      window._refreshDownloads && window._refreshDownloads(data);
+    }
+  } catch(e) {}
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadStatus();
+loadPage('home');
+setInterval(loadStatus,   30000);
+setInterval(pollDownloads, 3000);
+</script>
+
+<script>
+// ── Animated background engine ────────────────────────────────────────────────
+const _animCanvas = document.getElementById('animBg');
+const _animCtx    = _animCanvas ? _animCanvas.getContext('2d') : null;
+window._animFrame  = null;
+window._animType   = null;
+let   _animTime   = 0;
+
+function _resizeCanvas() {
+  if (!_animCanvas) return;
+  _animCanvas.width  = window.innerWidth;
+  _animCanvas.height = window.innerHeight;
+}
+window.addEventListener('resize', _resizeCanvas);
+_resizeCanvas();
+
+// Orb state for nebula_storm / aurora / lava_lamp / arctic / void / ember
+const _orbs = [
+  { x:0.2, y:0.3, r:0.35, vx:0.00008, vy:0.00005 },
+  { x:0.7, y:0.6, r:0.30, vx:-0.00006, vy:0.00007 },
+  { x:0.5, y:0.2, r:0.25, vx:0.00005, vy:-0.00008 },
+  { x:0.3, y:0.7, r:0.28, vx:-0.00007, vy:-0.00004 },
+  { x:0.8, y:0.2, r:0.22, vx:0.00009, vy:0.00006 },
+];
+
+// Rain drops for neon_rain
+const _drops = Array.from({length:60}, () => ({
+  x: Math.random(),
+  y: Math.random(),
+  speed: 0.0002 + Math.random() * 0.0004,
+  len: 0.04 + Math.random() * 0.08,
+  op: 0.05 + Math.random() * 0.2,
+  color: Math.random() > 0.5 ? '#00f5ff' : '#7c3aed',
+}));
+
+// Grid for grid_pulse
+const _nodes = [];
+for (let gx = 0; gx <= 14; gx++) {
+  for (let gy = 0; gy <= 10; gy++) {
+    _nodes.push({ gx, gy, phase: Math.random() * Math.PI * 2, speed: 0.0005 + Math.random() * 0.001 });
+  }
+}
+
+function _drawFrame(ts) {
+  if (!_animCtx || !window._animType) return;
+  _animTime = ts * 0.001;
+  const W = _animCanvas.width, H = _animCanvas.height;
+  _animCtx.clearRect(0, 0, W, H);
+
+  if (window._animType === 'nebula_storm') {
+    _drawOrbs(W, H, [
+      {c:'#7c3aed', o:0.45}, {c:'#0ea5e9', o:0.35}, {c:'#c026d3', o:0.28},
+      {c:'#7c3aed', o:0.2},  {c:'#0ea5e9', o:0.18},
+    ]);
+    _drawStars(W, H, '#ffffff', 120);
+  } else if (window._animType === 'aurora') {
+    _drawOrbs(W, H, [
+      {c:'#c084fc', o:0.4}, {c:'#818cf8', o:0.35}, {c:'#a855f7', o:0.3},
+      {c:'#c084fc', o:0.2}, {c:'#818cf8', o:0.15},
+    ]);
+    _drawStars(W, H, '#ffffff', 80);
+  } else if (window._animType === 'ember') {
+    _drawOrbs(W, H, [
+      {c:'#ea580c', o:0.5}, {c:'#dc2626', o:0.4}, {c:'#f59e0b', o:0.25},
+      {c:'#ea580c', o:0.2}, {c:'#dc2626', o:0.15},
+    ]);
+    _drawEmbers(W, H);
+  } else if (window._animType === 'arctic') {
+    _drawOrbs(W, H, [
+      {c:'#0ea5e9', o:0.38}, {c:'#06b6d4', o:0.3}, {c:'#38bdf8', o:0.22},
+      {c:'#0ea5e9', o:0.18}, {c:'#06b6d4', o:0.14},
+    ]);
+    _drawStars(W, H, '#bae6fd', 100);
+  } else if (window._animType === 'void') {
+    _drawOrbs(W, H, [
+      {c:'#6d28d9', o:0.35}, {c:'#4f46e5', o:0.28}, {c:'#7c3aed', o:0.2},
+      {c:'#6d28d9', o:0.15}, {c:'#4f46e5', o:0.12},
+    ]);
+    _drawStars(W, H, '#ffffff', 200);
+  } else if (window._animType === 'neon_rain') {
+    _drawNeonRain(W, H);
+  } else if (window._animType === 'lava_lamp') {
+    _drawLavaLamp(W, H);
+  } else if (window._animType === 'grid_pulse') {
+    _drawGridPulse(W, H);
+  }
+
+  window._animFrame = requestAnimationFrame(_drawFrame);
+}
+
+function _drawOrbs(W, H, colors) {
+  _orbs.forEach((orb, i) => {
+    orb.x += orb.vx;
+    orb.y += orb.vy;
+    if (orb.x < -0.1) orb.vx =  Math.abs(orb.vx);
+    if (orb.x >  1.1) orb.vx = -Math.abs(orb.vx);
+    if (orb.y < -0.1) orb.vy =  Math.abs(orb.vy);
+    if (orb.y >  1.1) orb.vy = -Math.abs(orb.vy);
+    const grad = _animCtx.createRadialGradient(
+      orb.x*W, orb.y*H, 0,
+      orb.x*W, orb.y*H, orb.r * Math.max(W,H)
+    );
+    const col = colors[i] || colors[0];
+    grad.addColorStop(0, col.c + Math.round(col.o * 255).toString(16).padStart(2,'0'));
+    grad.addColorStop(1, col.c + '00');
+    _animCtx.fillStyle = grad;
+    _animCtx.fillRect(0, 0, W, H);
+  });
+}
+
+function _drawStars(W, H, color, count) {
+  _animCtx.fillStyle = color;
+  // Use seeded positions — stable, not redrawn every frame
+  for (let i = 0; i < count; i++) {
+    const sx = ((i * 137.508 + 23) % 1) * W;
+    const sy = ((i * 97.3 + 11) % 1) * H;
+    const op = 0.3 + (Math.sin(_animTime * 0.5 + i) * 0.5 + 0.5) * 0.4;
+    const sz = 0.5 + (i % 3) * 0.4;
+    _animCtx.globalAlpha = op;
+    _animCtx.beginPath();
+    _animCtx.arc(sx, sy, sz, 0, Math.PI * 2);
+    _animCtx.fill();
+  }
+  _animCtx.globalAlpha = 1;
+}
+
+function _drawEmbers(W, H) {
+  // Floating ember particles rising upward
+  for (let i = 0; i < 40; i++) {
+    const t = (_animTime * (0.05 + i * 0.003) + i * 0.7) % 1;
+    const x = ((i * 73.1 + 17) % 1) * W + Math.sin(_animTime * 0.3 + i) * 30;
+    const y = H * (1 - t);
+    const op = t < 0.2 ? t/0.2 : t > 0.8 ? (1-t)/0.2 : 1;
+    const sz = 1 + (i % 3) * 0.8;
+    const colors = ['#f59e0b','#fb923c','#ea580c','#fbbf24'];
+    _animCtx.globalAlpha = op * 0.6;
+    _animCtx.fillStyle = colors[i % colors.length];
+    _animCtx.beginPath();
+    _animCtx.arc(x, y, sz, 0, Math.PI * 2);
+    _animCtx.fill();
+  }
+  _animCtx.globalAlpha = 1;
+}
+
+function _drawNeonRain(W, H) {
+  _drops.forEach(d => {
+    d.y += d.speed;
+    if (d.y - d.len > 1) d.y = -d.len;
+    const grad = _animCtx.createLinearGradient(d.x*W, (d.y-d.len)*H, d.x*W, d.y*H);
+    grad.addColorStop(0, d.color + '00');
+    grad.addColorStop(1, d.color + Math.round(d.op * 255).toString(16).padStart(2,'0'));
+    _animCtx.strokeStyle = grad;
+    _animCtx.lineWidth = 0.8;
+    _animCtx.beginPath();
+    _animCtx.moveTo(d.x*W, (d.y-d.len)*H);
+    _animCtx.lineTo(d.x*W, d.y*H);
+    _animCtx.stroke();
+  });
+  // Glow pools at bottom
+  const g1 = _animCtx.createRadialGradient(W*0.2, H, 0, W*0.2, H, W*0.3);
+  g1.addColorStop(0, '#00f5ff22'); g1.addColorStop(1, '#00000000');
+  _animCtx.fillStyle = g1; _animCtx.fillRect(0,0,W,H);
+  const g2 = _animCtx.createRadialGradient(W*0.75, H, 0, W*0.75, H, W*0.3);
+  g2.addColorStop(0, '#7c3aed22'); g2.addColorStop(1, '#00000000');
+  _animCtx.fillStyle = g2; _animCtx.fillRect(0,0,W,H);
+}
+
+function _drawLavaLamp(W, H) {
+  _orbs.forEach((orb, i) => {
+    orb.x += orb.vx * 0.6;
+    orb.y += orb.vy * 0.5 + Math.sin(_animTime * 0.3 + i) * 0.00008;
+    if (orb.x < -0.1) orb.vx =  Math.abs(orb.vx);
+    if (orb.x >  1.1) orb.vx = -Math.abs(orb.vx);
+    if (orb.y < -0.1) orb.vy =  Math.abs(orb.vy);
+    if (orb.y >  1.1) orb.vy = -Math.abs(orb.vy);
+    const cols = ['#d946ef','#7c3aed','#ec4899','#a855f7','#d946ef'];
+    const ops  = [0.55, 0.45, 0.4, 0.35, 0.25];
+    const rMult = 0.4 + Math.sin(_animTime * 0.2 + i) * 0.05;
+    const grad = _animCtx.createRadialGradient(
+      orb.x*W, orb.y*H, 0,
+      orb.x*W, orb.y*H, rMult * Math.max(W,H)
+    );
+    grad.addColorStop(0, cols[i] + Math.round(ops[i]*255).toString(16).padStart(2,'0'));
+    grad.addColorStop(1, cols[i] + '00');
+    _animCtx.fillStyle = grad;
+    _animCtx.fillRect(0, 0, W, H);
+  });
+}
+
+function _drawGridPulse(W, H) {
+  const cellW = W / 14, cellH = H / 10;
+  _animCtx.strokeStyle = '#00ff8820';
+  _animCtx.lineWidth = 0.5;
+  // Horizontal lines
+  for (let gy = 0; gy <= 10; gy++) {
+    _animCtx.beginPath();
+    _animCtx.moveTo(0, gy*cellH);
+    _animCtx.lineTo(W, gy*cellH);
+    _animCtx.stroke();
+  }
+  // Vertical lines
+  for (let gx = 0; gx <= 14; gx++) {
+    _animCtx.beginPath();
+    _animCtx.moveTo(gx*cellW, 0);
+    _animCtx.lineTo(gx*cellW, H);
+    _animCtx.stroke();
+  }
+  // Pulsing nodes at intersections
+  _nodes.forEach(n => {
+    const pulse = Math.sin(_animTime * n.speed * 1000 + n.phase);
+    const op = (pulse * 0.5 + 0.5) * 0.7;
+    const sz = Math.max(0.1, 1 + pulse * 1.5);
+    _animCtx.globalAlpha = op;
+    _animCtx.fillStyle = '#00ff88';
+    _animCtx.beginPath();
+    _animCtx.arc(n.gx * cellW, n.gy * cellH, sz, 0, Math.PI * 2);
+    _animCtx.fill();
+  });
+  _animCtx.globalAlpha = 1;
+  // Center glow
+  const cg = _animCtx.createRadialGradient(W/2,H/2,0, W/2,H/2, W*0.45);
+  cg.addColorStop(0, '#00ff8818'); cg.addColorStop(1, '#00000000');
+  _animCtx.fillStyle = cg; _animCtx.fillRect(0,0,W,H);
+}
+
+window.startAnimation = function(type) {
+  if (window._animFrame) { cancelAnimationFrame(window._animFrame); window._animFrame = null; }
+  if (!type || !_animCanvas) return;
+  window._animType = type;
+  _animCanvas.style.opacity = '1';
+  window._animFrame = requestAnimationFrame(_drawFrame);
+};
+
+window.stopAnimation = function() {
+  if (window._animFrame) { cancelAnimationFrame(window._animFrame); window._animFrame = null; }
+  window._animType = null;
+  if (_animCanvas) _animCanvas.style.opacity = '0';
+};
+
+// Now that animation engine is ready, start animation for saved theme if needed
+(function() {
+  const saved = window._pendingInitTheme || localStorage.getItem('einthubot_theme') || 'amber';
+  const t = THEMES[saved];
+  if (t && t.animated) {
+    // Make containers transparent so animation shows through
+    document.body.style.background = t.bg;
+    const pc = document.getElementById('page-container');
+    if (pc) pc.style.background = 'transparent';
+    const sb = document.getElementById('sidebar');
+    if (sb) sb.style.background = 'transparent';
+    const mn = document.getElementById('main');
+    if (mn) mn.style.background = 'transparent';
+    window.startAnimation(t.animated);
+  }
+})();
+</script>
+</body>
+</html>

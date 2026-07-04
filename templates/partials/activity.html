@@ -1,0 +1,64 @@
+<style>
+  .page-inner{padding:28px 32px;max-width:1300px;margin:0 auto;}
+  .card{background:var(--surface);border:0.5px solid var(--border2);border-radius:var(--radius);overflow:hidden;}
+  .card-header{padding:14px 18px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+  .card-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);}
+  .btn{padding:8px 16px;border-radius:8px;border:none;font-size:13px;font-weight:600;cursor:pointer;transition:opacity 0.15s;}
+  .btn:hover{opacity:0.85;}
+  .btn-outline{background:transparent;border:0.5px solid var(--border2);color:var(--muted);}
+  .btn-sm{padding:5px 12px;font-size:12px;}
+  .activity-item{display:flex;gap:12px;padding:11px 16px;border-bottom:0.5px solid var(--border);font-size:13px;}
+  .activity-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:5px;}
+  .d-success{background:var(--success);} .d-error{background:var(--error);} .d-pending{background:var(--accent);animation:pulse 1.5s infinite;} .d-info{background:var(--info);}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+  .act-body{flex:1;min-width:0;}
+  .act-title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .act-msg{color:var(--muted);margin-top:2px;line-height:1.4;font-size:12px;}
+  .act-time{font-size:11px;color:var(--muted);flex-shrink:0;}
+  .act-badge{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;text-transform:uppercase;margin-left:5px;}
+  .ab-seerr{background:rgba(91,141,238,0.2);color:var(--info);}
+  .ab-search{background:rgba(240,151,30,0.2);color:var(--accent);}
+  .ab-download{background:rgba(59,212,122,0.2);color:var(--success);}
+  .ab-library{background:rgba(224,59,59,0.2);color:var(--error);}
+  .ab-system{background:rgba(90,90,122,0.2);color:var(--muted);}
+  .empty-state{padding:48px 20px;text-align:center;color:var(--muted);}
+  .empty-icon{font-size:32px;margin-bottom:10px;}
+  .empty-label{font-size:13px;}
+  .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:5px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+
+<div class="page-inner">
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Activity log</span>
+      <button class="btn btn-outline btn-sm" onclick="loadAct()">↻ Refresh</button>
+    </div>
+    <div id="actList" style="max-height:800px;overflow-y:auto;"></div>
+  </div>
+</div>
+
+<script>
+const ABMAP2 = {seerr:'ab-seerr',search:'ab-search',download:'ab-download',library:'ab-library',system:'ab-system'};
+const DMAP2  = {success:'d-success',error:'d-error',pending:'d-pending',info:'d-info'};
+
+async function loadAct() {
+  const el = document.getElementById('actList');
+  el.innerHTML = `<div class="empty-state"><span class="spin"></span> Loading…</div>`;
+  try {
+    const data = await fetch('/api/activity').then(r=>r.json());
+    if (!data.length) { el.innerHTML=`<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-label">No activity yet</div></div>`; return; }
+    el.innerHTML = data.map(a=>`
+      <div class="activity-item">
+        <div class="activity-dot ${DMAP2[a.status]||'d-info'}"></div>
+        <div class="act-body">
+          <div class="act-title">${esc(a.title)}<span class="act-badge ${ABMAP2[a.kind]||'ab-system'}">${esc(a.kind)}</span></div>
+          <div class="act-msg">${esc(a.msg)}</div>
+        </div>
+        <div class="act-time">${esc((a.time||'').split(' ')[1]||a.time)}</div>
+      </div>`).join('');
+  } catch(e) { el.innerHTML=`<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-label">Failed to load</div></div>`; }
+}
+
+window.init_activity = loadAct;
+</script>

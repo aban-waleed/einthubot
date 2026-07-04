@@ -1,0 +1,114 @@
+<style>
+  .page-inner{padding:28px 32px;max-width:1300px;margin:0 auto;}
+  .card{background:var(--surface);border:0.5px solid var(--border2);border-radius:var(--radius);overflow:hidden;}
+  .card-header{padding:14px 18px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+  .card-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);}
+  .search-row{display:flex;gap:10px;padding:16px;border-bottom:0.5px solid var(--border);}
+  .search-row input,.search-row select{background:var(--surface2);border:0.5px solid var(--border2);color:var(--text);border-radius:8px;padding:9px 14px;font-size:13px;outline:none;transition:border-color 0.2s;}
+  .search-row input{flex:1;}
+  .search-row input:focus,.search-row select:focus{border-color:var(--accent);}
+  .search-row select option{background:var(--surface);}
+  .btn{padding:8px 16px;border-radius:8px;border:none;font-size:13px;font-weight:600;cursor:pointer;transition:opacity 0.15s;}
+  .btn-accent{background:var(--accent);color:#000;}
+  .btn:hover{opacity:0.85;}
+  .result-item{display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:0.5px solid var(--border);transition:background 0.15s;}
+  .result-item:last-child{border-bottom:none;}
+  .result-item:hover{background:rgba(255,255,255,0.02);}
+  .result-thumb{width:44px;height:62px;border-radius:7px;object-fit:cover;background:var(--border2);flex-shrink:0;}
+  .result-thumb-ph{width:44px;height:62px;border-radius:7px;background:var(--border2);display:grid;place-items:center;font-size:18px;flex-shrink:0;}
+  .result-info{flex:1;min-width:0;}
+  .result-title{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .result-meta{font-size:11px;color:var(--muted);margin-top:3px;}
+  .result-badges{display:flex;gap:5px;margin-top:5px;flex-wrap:wrap;}
+  .tag{display:inline-block;padding:2px 7px;border-radius:5px;font-size:10px;font-weight:600;}
+  .tag-rating{background:rgba(240,151,30,0.15);color:var(--accent);}
+  .tag-genre{background:var(--surface2);color:var(--muted);}
+  .tag-lang{background:rgba(91,141,238,0.15);color:var(--info);}
+  .empty-state{padding:48px 20px;text-align:center;color:var(--muted);}
+  .empty-icon{font-size:32px;margin-bottom:10px;}
+  .empty-label{font-size:13px;}
+  .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:5px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .btn-sm{padding:5px 12px;font-size:12px;}
+</style>
+
+<div class="page-inner">
+  <div class="card">
+    <div class="card-header"><span class="card-title">Search Einthusan</span></div>
+    <div class="search-row">
+      <input type="text" id="searchInput" placeholder="Search Hindi movies…" onkeydown="if(event.key==='Enter') doSearch()" />
+      <select id="langSelect">
+        <option value="hindi">Hindi</option>
+        <option value="tamil">Tamil</option>
+        <option value="telugu">Telugu</option>
+        <option value="malayalam">Malayalam</option>
+        <option value="kannada">Kannada</option>
+        <option value="bengali">Bengali</option>
+        <option value="punjabi">Punjabi</option>
+        <option value="marathi">Marathi</option>
+      </select>
+      <button class="btn btn-accent" onclick="doSearch()" id="searchBtn">Search</button>
+    </div>
+    <div id="resultsList"><div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-label">Search for a movie to get started</div></div></div>
+  </div>
+</div>
+
+<script>
+const genreMap = {28:'Action',12:'Adventure',16:'Animation',35:'Comedy',80:'Crime',18:'Drama',10751:'Family',14:'Fantasy',36:'History',27:'Horror',10402:'Music',9648:'Mystery',10749:'Romance',878:'Sci-Fi',53:'Thriller',10752:'War',37:'Western'};
+
+window.init_search = function() {
+  document.getElementById('searchInput').focus();
+};
+
+async function doSearch() {
+  const q = document.getElementById('searchInput').value.trim();
+  const lang = document.getElementById('langSelect').value;
+  if (!q) return;
+  const btn = document.getElementById('searchBtn');
+  btn.innerHTML = '<span class="spin"></span>Searching…'; btn.disabled = true;
+  const el = document.getElementById('resultsList');
+  el.innerHTML = `<div class="empty-state"><span class="spin"></span> Searching…</div>`;
+  try {
+    const data = await fetch(`/api/search?q=${encodeURIComponent(q)}&lang=${lang}`).then(r=>r.json());
+    const results = data.results || [];
+    if (!results.length) { el.innerHTML=`<div class="empty-state"><div class="empty-icon">😕</div><div class="empty-label">No results for "${esc(q)}"</div></div>`; return; }
+
+    const key = await getTmdbKey();
+    const enriched = await Promise.all(results.map(async item => {
+      if (!key || !item.year) return {...item, tmdb:null};
+      try {
+        const tr = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${key}&query=${encodeURIComponent(item.title)}&year=${item.year}&language=en-US`).then(r=>r.json());
+        return {...item, tmdb: tr.results?.[0]||null};
+      } catch(e) { return {...item, tmdb:null}; }
+    }));
+
+    el.innerHTML = enriched.map(item => {
+      const posterSrc = item.tmdb?.poster_path ? `${TMDB}w92${item.tmdb.poster_path}` : item.thumb||'';
+      const rating    = item.tmdb?.vote_average ? Number(item.tmdb.vote_average).toFixed(1) : '';
+      const genres    = (item.tmdb?.genre_ids||[]).slice(0,2).map(id=>genreMap[id]).filter(Boolean);
+      return `
+        <div class="result-item">
+          ${posterSrc?`<img class="result-thumb" src="${esc(posterSrc)}" alt="" onerror="this.style.display='none'">`:`<div class="result-thumb-ph">🎬</div>`}
+          <div class="result-info">
+            <div class="result-title">${esc(item.title)}</div>
+            <div class="result-meta">${esc(item.year||'')} · ${esc(item.language)}</div>
+            <div class="result-badges">
+              ${rating?`<span class="tag tag-rating">⭐ ${rating}</span>`:''}
+              ${genres.map(g=>`<span class="tag tag-genre">${esc(g)}</span>`).join('')}
+              <span class="tag tag-lang">${esc(item.language)}</span>
+            </div>
+          </div>
+          <button class="btn btn-accent btn-sm" onclick='searchQueueDl(${JSON.stringify(item.title)},${JSON.stringify(item.url)},${JSON.stringify(item.year||"")})'>↓ Download</button>
+        </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML=`<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-label">Search failed</div></div>`;
+  } finally { btn.innerHTML='Search'; btn.disabled=false; }
+}
+
+async function searchQueueDl(title, url, year) {
+  const d = await fetch('/api/download',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,url,year})}).then(r=>r.json());
+  if (d.ok) showToast(`Queued: ${title}`,'success','Download queued');
+  else showToast(d.error||'Failed','error');
+}
+</script>
