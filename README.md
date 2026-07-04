@@ -377,3 +377,9 @@ Make sure `JELLYFIN_API_KEY` and `JELLYFIN_URL` are set in both `.env` and `dock
 - Downloads are streamed directly from Einthusan's CDN (`cdn1.einthusan.io`) to your server
 - The Jellyseerr watcher polls for new pending requests every `POLL_INTERVAL` seconds — for immediate downloads use the Search or Requests tab manually
 - All downloaded files and folders are created with `777` permissions so Jellyfin can manage them
+
+---
+
+## License
+
+Released under the [MIT License](LICENSE) © 2026 Aban Waleed.
