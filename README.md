@@ -240,6 +240,11 @@ A running log of every search, match, download and Jellyseerr event.
 
 ![Activity tab](docs/activity.png)
 
+### Settings
+Edit all configuration in the browser, toggle to reveal secrets, and pick from 20 themes (13 standard + 7 animated exclusives).
+
+![Settings tab](docs/settings.png)
+
 ---
 
 ## How It Works
