@@ -2,15 +2,9 @@
 
 A self-hosted tool that integrates [Einthusan.tv](https://einthusan.tv) Premium into your Jellyfin media stack. Search, request, and download South Asian films directly into your Jellyfin library — with a full web UI, Jellyseerr integration, and TMDB metadata.
 
-![EinthuBot home dashboard](docs/home.png)
-
----
-
-## Demo
-
-The full flow — search Einthusan, queue a download, and watch it progress live:
-
 ![Download flow demo](docs/demo.gif)
+
+![EinthuBot home dashboard](docs/home.png)
 
 ---
 
