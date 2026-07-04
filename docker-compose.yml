@@ -7,7 +7,7 @@ services:
     ports:
       - "${WEB_PORT:-7879}:7878"
     volumes:
-      - "/home/phantom/media/movies:/downloads/einthusan"
+      - "${MEDIA_DIR:-/path/to/media/movies}:/downloads/einthusan"
       - ./logs:/app/logs
     environment:
       # ── Einthusan Premium Account ──────────────────────────────────

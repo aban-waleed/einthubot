@@ -77,8 +77,9 @@ JELLYFIN_API_KEY=your_jellyfin_api_key
 TMDB_API_KEY=your_tmdb_api_key
 
 # ── Download Settings ───────────────────────────────────────────────────────
-# This must match your Jellyfin movies library path on the host
-DOWNLOAD_DIR=/home/your-user/media/movies
+# Host path to your Jellyfin movies library — mounted into the container.
+# docker-compose.yml reads this via ${MEDIA_DIR}, so no need to edit compose.
+MEDIA_DIR=/home/your-user/media/movies
 
 # How often to check Jellyseerr for new requests (seconds)
 POLL_INTERVAL=120
@@ -114,11 +115,11 @@ networks:
     external: true
 ```
 
-Also confirm the volume mount uses your actual movies path:
+The movies volume is driven by `${MEDIA_DIR}` from your `.env`, so you don't need to edit it here:
 
 ```yaml
 volumes:
-  - "/home/your-user/media/movies:/downloads/einthusan"
+  - "${MEDIA_DIR:-/path/to/media/movies}:/downloads/einthusan"
 ```
 
 ### Step 5 — Fix folder permissions
@@ -312,7 +313,8 @@ Downloaded files follow Jellyfin's recommended naming convention so metadata mat
 | `JELLYFIN_URL` | `http://jellyfin:8096` | Jellyfin URL (use container name) |
 | `JELLYFIN_API_KEY` | — | Jellyfin API key |
 | `TMDB_API_KEY` | — | TMDB API key for metadata and posters |
-| `DOWNLOAD_DIR` | `/downloads/einthusan` | Where MP4s are saved (map to your Jellyfin library) |
+| `MEDIA_DIR` | `/path/to/media/movies` | **Host** path to your Jellyfin movies library (bind-mounted into the container) |
+| `DOWNLOAD_DIR` | `/downloads/einthusan` | Container path where MP4s are written (constant; maps to `MEDIA_DIR`) |
 | `POLL_INTERVAL` | `120` | Seconds between Jellyseerr polls |
 | `WEB_PORT` | `7879` | **Host** port for the Web UI (mapped to `7878` inside the container) |
 
