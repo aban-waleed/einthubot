@@ -61,20 +61,22 @@ const DMAP  = {success:'d-success',error:'d-error',pending:'d-pending',info:'d-i
 
 window.init_home = async function() {
   try {
-    const [lib, reqs, dls, act] = await Promise.all([
+    const [lib, shows, reqs, dls, act] = await Promise.all([
       fetch('/api/library').then(r=>r.json()),
+      fetch('/api/shows').then(r=>r.json()).catch(()=>[]),
       fetch('/api/requests').then(r=>r.json()),
       fetch('/api/downloads').then(r=>r.json()),
       fetch('/api/activity').then(r=>r.json()),
     ]);
 
-    const libArr = Array.isArray(lib)  ? lib  : [];
-    const reqArr = Array.isArray(reqs) ? reqs : [];
-    const dlArr  = Array.isArray(dls)  ? dls  : [];
-    const actArr = Array.isArray(act)  ? act  : [];
+    const libArr  = Array.isArray(lib)   ? lib   : [];
+    const showArr = Array.isArray(shows) ? shows : [];
+    const reqArr  = Array.isArray(reqs)  ? reqs  : [];
+    const dlArr   = Array.isArray(dls)   ? dls   : [];
+    const actArr  = Array.isArray(act)   ? act   : [];
 
-    // Stats
-    document.getElementById('statMovies').textContent  = libArr.length;
+    // Stats — Library counts movies + TV shows
+    document.getElementById('statMovies').textContent  = libArr.length + showArr.length;
     document.getElementById('statPending').textContent = reqArr.filter(r=>r.status==='pending').length;
     document.getElementById('statActive').textContent  = dlArr.filter(d=>d.status==='downloading').length;
     const totalMB = dlArr.reduce((a,d)=>a+(d.size_mb||0),0);
@@ -88,14 +90,8 @@ window.init_home = async function() {
 
     // Update sidebar badges
     window.setReqBadge(reqArr.filter(r=>r.status==='pending').length);
-    // Include shows in library badge
-    try {
-      const shows = await fetch('/api/shows').then(r=>r.json());
-      const showCount = Array.isArray(shows) ? shows.length : 0;
-      window.setLibBadge(libArr.length + showCount);
-    } catch(e) {
-      window.setLibBadge(libArr.length);
-    }
+    // Library badge = movies + shows (same total as the stat card)
+    window.setLibBadge(libArr.length + showArr.length);
     window.updateSidebarDl(dlArr);
 
     // Pending requests
