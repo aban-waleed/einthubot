@@ -6,6 +6,14 @@ A self-hosted tool that integrates [Einthusan.tv](https://einthusan.tv) Premium 
 
 ---
 
+## Demo
+
+The full flow — search Einthusan, queue a download, and watch it progress live:
+
+![Download flow demo](docs/demo.gif)
+
+---
+
 ## Features
 
 - 🏠 **Home dashboard** — at-a-glance stats: library size, active downloads, pending requests and total storage used
