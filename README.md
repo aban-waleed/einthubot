@@ -213,6 +213,35 @@ You should see a green **Online · Premium** badge in the top right.
 
 ---
 
+## Screenshots
+
+### Search
+Search Einthusan by title and language, with TMDB ratings and genres on each result.
+
+![Search tab](docs/search.png)
+
+### Requests
+Every Jellyseerr request with live status — available, processing, partially available — and one-click download.
+
+![Requests tab](docs/requests.png)
+
+### Library
+Your Jellyfin movies and TV shows with posters, ratings and genres. Watch or delete in one click.
+
+![Library tab](docs/library.png)
+
+### Downloads
+Active downloads with live progress plus a download history.
+
+![Downloads tab](docs/downloads.png)
+
+### Activity
+A running log of every search, match, download and Jellyseerr event.
+
+![Activity tab](docs/activity.png)
+
+---
+
 ## How It Works
 
 ```
