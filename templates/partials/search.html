@@ -24,6 +24,8 @@
   .tag-rating{background:rgba(240,151,30,0.15);color:var(--accent);}
   .tag-genre{background:var(--surface2);color:var(--muted);}
   .tag-lang{background:rgba(91,141,238,0.15);color:var(--info);}
+  .tag-uhd{background:rgba(139,92,246,0.2);color:#a78bfa;border:0.5px solid rgba(139,92,246,0.4);font-weight:800;}
+  .tag-hd{background:rgba(59,130,246,0.15);color:#60a5fa;}
   .empty-state{padding:48px 20px;text-align:center;color:var(--muted);}
   .empty-icon{font-size:32px;margin-bottom:10px;}
   .empty-label{font-size:13px;}
@@ -54,38 +56,38 @@
 </div>
 
 <script>
-const genreMap = {28:'Action',12:'Adventure',16:'Animation',35:'Comedy',80:'Crime',18:'Drama',10751:'Family',14:'Fantasy',36:'History',27:'Horror',10402:'Music',9648:'Mystery',10749:'Romance',878:'Sci-Fi',53:'Thriller',10752:'War',37:'Western'};
+var genreMap = {28:'Action',12:'Adventure',16:'Animation',35:'Comedy',80:'Crime',18:'Drama',10751:'Family',14:'Fantasy',36:'History',27:'Horror',10402:'Music',9648:'Mystery',10749:'Romance',878:'Sci-Fi',53:'Thriller',10752:'War',37:'Western'};
 
 window.init_search = function() {
   document.getElementById('searchInput').focus();
 };
 
 async function doSearch() {
-  const q = document.getElementById('searchInput').value.trim();
-  const lang = document.getElementById('langSelect').value;
+  var q = document.getElementById('searchInput').value.trim();
+  var lang = document.getElementById('langSelect').value;
   if (!q) return;
-  const btn = document.getElementById('searchBtn');
+  var btn = document.getElementById('searchBtn');
   btn.innerHTML = '<span class="spin"></span>Searching…'; btn.disabled = true;
-  const el = document.getElementById('resultsList');
+  var el = document.getElementById('resultsList');
   el.innerHTML = `<div class="empty-state"><span class="spin"></span> Searching…</div>`;
   try {
-    const data = await fetch(`/api/search?q=${encodeURIComponent(q)}&lang=${lang}`).then(r=>r.json());
-    const results = data.results || [];
+    var data = await fetch(`/api/search?q=${encodeURIComponent(q)}&lang=${lang}`).then(r=>r.json());
+    var results = data.results || [];
     if (!results.length) { el.innerHTML=`<div class="empty-state"><div class="empty-icon">😕</div><div class="empty-label">No results for "${esc(q)}"</div></div>`; return; }
 
-    const key = await getTmdbKey();
-    const enriched = await Promise.all(results.map(async item => {
+    var key = await getTmdbKey();
+    var enriched = await Promise.all(results.map(async item => {
       if (!key || !item.year) return {...item, tmdb:null};
       try {
-        const tr = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${key}&query=${encodeURIComponent(item.title)}&year=${item.year}&language=en-US`).then(r=>r.json());
+        var tr = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${key}&query=${encodeURIComponent(item.title)}&year=${item.year}&language=en-US`).then(r=>r.json());
         return {...item, tmdb: tr.results?.[0]||null};
       } catch(e) { return {...item, tmdb:null}; }
     }));
 
     el.innerHTML = enriched.map(item => {
-      const posterSrc = item.tmdb?.poster_path ? `${TMDB}w92${item.tmdb.poster_path}` : item.thumb||'';
-      const rating    = item.tmdb?.vote_average ? Number(item.tmdb.vote_average).toFixed(1) : '';
-      const genres    = (item.tmdb?.genre_ids||[]).slice(0,2).map(id=>genreMap[id]).filter(Boolean);
+      var posterSrc = item.tmdb?.poster_path ? `${TMDB}w92${item.tmdb.poster_path}` : item.thumb||'';
+      var rating    = item.tmdb?.vote_average ? Number(item.tmdb.vote_average).toFixed(1) : '';
+      var genres    = (item.tmdb?.genre_ids||[]).slice(0,2).map(id=>genreMap[id]).filter(Boolean);
       return `
         <div class="result-item">
           ${posterSrc?`<img class="result-thumb" src="${esc(posterSrc)}" alt="" onerror="this.style.display='none'">`:`<div class="result-thumb-ph">🎬</div>`}
@@ -95,6 +97,7 @@ async function doSearch() {
             <div class="result-badges">
               ${rating?`<span class="tag tag-rating">⭐ ${rating}</span>`:''}
               ${genres.map(g=>`<span class="tag tag-genre">${esc(g)}</span>`).join('')}
+              ${item.uhd ? `<span class="tag tag-uhd">⬆ UHD</span>` : item.hd ? `<span class="tag tag-hd">HD</span>` : ''}
               <span class="tag tag-lang">${esc(item.language)}</span>
             </div>
           </div>
@@ -107,7 +110,7 @@ async function doSearch() {
 }
 
 async function searchQueueDl(title, url, year) {
-  const d = await fetch('/api/download',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,url,year})}).then(r=>r.json());
+  var d = await fetch('/api/download',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,url,year})}).then(r=>r.json());
   if (d.ok) showToast(`Queued: ${title}`,'success','Download queued');
   else showToast(d.error||'Failed','error');
 }

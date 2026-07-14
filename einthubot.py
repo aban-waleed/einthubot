@@ -333,10 +333,14 @@ class EinthusanClient:
                     thumb       = img["src"] if img else ""
                     if thumb.startswith("//"):
                         thumb = "https:" + thumb
+                    # Detect UHD availability from search result badges
+                    uhd = bool(item.select_one("i.ultrahd"))
+                    hd  = bool(item.select_one("i.hd"))
                     results.append({
                         "title": movie_title, "year": year,
                         "url":   urljoin(Config.EINTHUSAN_BASE, href),
                         "thumb": thumb, "language": lang,
+                        "uhd": uhd, "hd": hd,
                     })
                 except Exception as ex:
                     log.warning("Error parsing result: %s", ex)
@@ -346,7 +350,7 @@ class EinthusanClient:
             log.error("Search error for '%s': %s", title, e)
             return []
 
-    def get_download_url(self, movie_url: str) -> Optional[str]:
+    def get_download_url(self, movie_url: str, prefer_uhd: bool = True) -> Optional[str]:
         try:
             self.session.headers.update({"Referer": Config.EINTHUSAN_BASE, "Content-Type": "text/html"})
             r     = self.session.get(movie_url, timeout=15)
@@ -357,6 +361,27 @@ class EinthusanClient:
             movie_id    = match.group(1)
             lang_match  = re.search(r'lang=([^&]+)', movie_url)
             lang        = lang_match.group(1) if lang_match else Config.LANGUAGE
+
+            # Check if UHD is available on the movie page
+            soup_check = BeautifulSoup(r.text, "html.parser")
+            has_uhd = bool(soup_check.select_one("i.ultrahd"))
+
+            # Try UHD first if available and preferred
+            if prefer_uhd and has_uhd:
+                try:
+                    uhd_url = f"{Config.EINTHUSAN_BASE}/premium/movie/watch/{movie_id}/?lang={lang}&uhd=true"
+                    self.session.headers.update({"Referer": movie_url})
+                    r_uhd = self.session.get(uhd_url, timeout=15)
+                    if r_uhd.status_code == 200 and "UIVideoPlayer" in r_uhd.text:
+                        soup_uhd = BeautifulSoup(r_uhd.text, "html.parser")
+                        mp4_tag = soup_uhd.find(attrs={"data-mp4-link": True})
+                        if mp4_tag:
+                            log.info("Using UHD source for movie %s", movie_id)
+                            return self._fix_cdn_url(mp4_tag["data-mp4-link"]), True
+                except Exception as ue:
+                    log.warning("UHD fetch failed, falling back to HD: %s", ue)
+
+            # Fall back to standard HD
             premium_url = f"{Config.EINTHUSAN_BASE}/premium/movie/watch/{movie_id}/?lang={lang}"
             self.session.headers.update({"Referer": movie_url})
             r2   = self.session.get(premium_url, timeout=15)
@@ -364,10 +389,10 @@ class EinthusanClient:
             soup = BeautifulSoup(r2.text, "html.parser")
             mp4_tag = soup.find(attrs={"data-mp4-link": True})
             if mp4_tag:
-                return self._fix_cdn_url(mp4_tag["data-mp4-link"])
+                return self._fix_cdn_url(mp4_tag["data-mp4-link"]), False
             hls_tag = soup.find(attrs={"data-hls-link": True})
             if hls_tag:
-                return self._fix_cdn_url(hls_tag["data-hls-link"])
+                return self._fix_cdn_url(hls_tag["data-hls-link"]), False
             return None
         except Exception as e:
             log.error("Error fetching download URL: %s", e)
@@ -597,7 +622,9 @@ def approve_and_download(title: str, year: str,
         log_activity("search", title, "No suitable match found", "error")
         return False
     log_activity("search", title, f"Matched: '{best['title']}' ({best.get('year','?')})", "info")
-    dl_url = einthusan.get_download_url(best["url"])
+    dl_url_result = einthusan.get_download_url(best["url"])
+    dl_url = dl_url_result[0] if isinstance(dl_url_result, tuple) else dl_url_result
+    is_uhd = dl_url_result[1] if isinstance(dl_url_result, tuple) else False
     if not dl_url:
         log_activity("download", title, "Could not find download link", "error")
         return False
@@ -695,6 +722,7 @@ def watcher_loop():
 
 # ── Flask Web UI ──────────────────────────────────────────────────────────────
 app = Flask(__name__)
+app.config["TEMPLATES_AUTO_RELOAD"] = True
 CORS(app)
 
 @app.route("/")
@@ -909,7 +937,9 @@ def api_download():
     cancel_flags[dl_id] = False
     pause_flags[dl_id]  = False
     def _do():
-        dl_url = einthusan.get_download_url(movie_url)
+        dl_url_result = einthusan.get_download_url(movie_url)
+        dl_url = dl_url_result[0] if isinstance(dl_url_result, tuple) else dl_url_result
+        is_uhd = dl_url_result[1] if isinstance(dl_url_result, tuple) else False
         if not dl_url:
             downloads[dl_id]["status"] = "error"
             log_activity("download", title, "No download URL found", "error")

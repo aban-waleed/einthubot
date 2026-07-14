@@ -19,6 +19,7 @@
   .prog-bar.errored{background:var(--error);}
   .prog-labels{font-size:11px;color:var(--muted);margin-top:5px;display:flex;justify-content:space-between;}
   .tmdb-chip{display:inline-block;font-size:10px;color:var(--muted);background:var(--surface2);border:0.5px solid var(--border2);border-radius:4px;padding:1px 6px;margin-left:5px;}
+  .uhd-chip{display:inline-block;font-size:10px;font-weight:800;color:#a78bfa;background:rgba(139,92,246,0.15);border:0.5px solid rgba(139,92,246,0.4);border-radius:4px;padding:1px 6px;margin-left:5px;}
   .btn-ghost{background:transparent;border:0.5px solid var(--border2);color:var(--muted);font-size:12px;padding:4px 10px;border-radius:6px;cursor:pointer;}
   .btn-pause{background:rgba(240,151,30,0.12);border:0.5px solid var(--accent);color:var(--accent);font-size:12px;padding:4px 10px;border-radius:6px;cursor:pointer;font-weight:600;}
   .btn-resume{background:rgba(59,212,122,0.12);border:0.5px solid var(--success);color:var(--success);font-size:12px;padding:4px 10px;border-radius:6px;cursor:pointer;font-weight:600;}
@@ -62,22 +63,23 @@
 </div>
 
 <script>
-let dlPendingRemove = null;
+var dlPendingRemove = null;
 
 function dsc(s){return({downloading:'ds-downloading',completed:'ds-completed',error:'ds-error',queued:'ds-queued',paused:'ds-paused',pausing:'ds-pausing'})[s]||'ds-queued';}
 function dsl(s){return({downloading:'Downloading',completed:'Completed',error:'Error',queued:'Queued',paused:'Paused',pausing:'Pausing…'})[s]||s;}
 function barCls(s){return s==='error'?'errored':s==='paused'||s==='pausing'?'paused':'';}
 
 function renderDl(dl) {
-  const p=dl.progress||0, id=esc(dl.id), t=esc(dl.title);
-  const isDown=dl.status==='downloading', isPaused=dl.status==='paused';
-  const sz=dl.total_mb>0?`${dl.size_mb} / ${dl.total_mb} MB`:dl.size_mb>0?`${dl.size_mb} MB`:'';
-  const tm=dl.started?`Started ${(dl.started||'').split(' ')[1]}`:dl.queued?`Queued ${(dl.queued||'').split(' ')[1]}`:'';
-  const fn=dl.finished?` · Finished ${(dl.finished||'').split(' ')[1]}`:'';
-  let acts='';
+  var p=dl.progress||0, id=esc(dl.id), t=esc(dl.title);
+  var isDown=dl.status==='downloading', isPaused=dl.status==='paused';
+  var sz=dl.total_mb>0?`${dl.size_mb} / ${dl.total_mb} MB`:dl.size_mb>0?`${dl.size_mb} MB`:'';
+  var uhdChip=dl.uhd?'<span class="uhd-chip">⬆ UHD</span>':'';
+  var tm=dl.started?`Started ${(dl.started||'').split(' ')[1]}`:dl.queued?`Queued ${(dl.queued||'').split(' ')[1]}`:'';
+  var fn=dl.finished?` · Finished ${(dl.finished||'').split(' ')[1]}`:'';
+  var acts='';
   if(isDown) acts=`<button class="btn-pause" onclick="dlPause('${id}')">⏸ Pause</button><button class="btn-cancel" onclick="dlCancel('${id}')">✕ Cancel</button>`;
   if(isPaused) acts=`<button class="btn-resume" onclick="dlResume('${id}')">▶ Resume</button><button class="btn-cancel" onclick="dlCancel('${id}')">✕ Cancel</button>`;
-  const showRm=['completed','error'].includes(dl.status);
+  var showRm=['completed','error'].includes(dl.status);
   return `<div class="dl-card">
     <div class="dl-header">
       <div><div class="dl-title-row">${t}${dl.year?` <span style="color:var(--muted);font-weight:400;">(${esc(dl.year)})</span>`:''}${dl.tmdb_id?`<span class="tmdb-chip">tmdb-${dl.tmdb_id}</span>`:''}</div><div class="dl-meta">${tm}${fn}</div></div>
@@ -90,10 +92,10 @@ function renderDl(dl) {
 
 async function refreshDls(data) {
   if (!data) data = await fetch('/api/downloads').then(r=>r.json());
-  const active  = data.filter(d=>['downloading','queued','paused','pausing'].includes(d.status));
-  const history = data.filter(d=>['completed','error'].includes(d.status)).reverse();
-  const ae = document.getElementById('activeDls');
-  const he = document.getElementById('dlHistory');
+  var active  = data.filter(d=>['downloading','queued','paused','pausing'].includes(d.status));
+  var history = data.filter(d=>['completed','error'].includes(d.status)).reverse();
+  var ae = document.getElementById('activeDls');
+  var he = document.getElementById('dlHistory');
   if (ae) ae.innerHTML = active.length  ? active.map(renderDl).join('')  : `<div class="empty-state"><div class="empty-icon">⬇️</div><div class="empty-label">No active downloads</div></div>`;
   if (he) he.innerHTML = history.length ? history.map(renderDl).join('') : `<div class="empty-state"><div class="empty-icon">📂</div><div class="empty-label">No download history yet</div></div>`;
   window.updateSidebarDl(data);

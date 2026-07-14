@@ -56,12 +56,12 @@
 </div>
 
 <script>
-const ABMAP = {seerr:'ab-seerr',search:'ab-search',download:'ab-download',library:'ab-library',system:'ab-system'};
-const DMAP  = {success:'d-success',error:'d-error',pending:'d-pending',info:'d-info'};
+var ABMAP = {seerr:'ab-seerr',search:'ab-search',download:'ab-download',library:'ab-library',system:'ab-system'};
+var DMAP  = {success:'d-success',error:'d-error',pending:'d-pending',info:'d-info'};
 
 window.init_home = async function() {
   try {
-    const [lib, shows, reqs, dls, act] = await Promise.all([
+    var [lib, shows, reqs, dls, act] = await Promise.all([
       fetch('/api/library').then(r=>r.json()),
       fetch('/api/shows').then(r=>r.json()).catch(()=>[]),
       fetch('/api/requests').then(r=>r.json()),
@@ -69,20 +69,20 @@ window.init_home = async function() {
       fetch('/api/activity').then(r=>r.json()),
     ]);
 
-    const libArr  = Array.isArray(lib)   ? lib   : [];
-    const showArr = Array.isArray(shows) ? shows : [];
-    const reqArr  = Array.isArray(reqs)  ? reqs  : [];
-    const dlArr   = Array.isArray(dls)   ? dls   : [];
-    const actArr  = Array.isArray(act)   ? act   : [];
+    var libArr  = Array.isArray(lib)   ? lib   : [];
+    var showArr = Array.isArray(shows) ? shows : [];
+    var reqArr  = Array.isArray(reqs)  ? reqs  : [];
+    var dlArr   = Array.isArray(dls)   ? dls   : [];
+    var actArr  = Array.isArray(act)   ? act   : [];
 
     // Stats — Library counts movies + TV shows
     document.getElementById('statMovies').textContent  = libArr.length + showArr.length;
     document.getElementById('statPending').textContent = reqArr.filter(r=>r.status==='pending').length;
     document.getElementById('statActive').textContent  = dlArr.filter(d=>d.status==='downloading').length;
-    const totalMB = dlArr.reduce((a,d)=>a+(d.size_mb||0),0);
+    var totalMB = dlArr.reduce((a,d)=>a+(d.size_mb||0),0);
     // Fetch real storage from Jellyfin
     try {
-      const storage = await fetch('/api/storage').then(r=>r.json());
+      var storage = await fetch('/api/storage').then(r=>r.json());
       document.getElementById('statStorage').textContent = storage.size || '—';
     } catch(e) {
       document.getElementById('statStorage').textContent = '—';
@@ -95,8 +95,8 @@ window.init_home = async function() {
     window.updateSidebarDl(dlArr);
 
     // Pending requests
-    const pending = reqArr.filter(r=>r.status==='pending');
-    const hp = document.getElementById('homePending');
+    var pending = reqArr.filter(r=>r.status==='pending');
+    var hp = document.getElementById('homePending');
     if (!pending.length) {
       hp.innerHTML = `<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-label">No pending requests</div></div>`;
     } else {
@@ -111,7 +111,7 @@ window.init_home = async function() {
     }
 
     // Activity
-    const ha = document.getElementById('homeActivity');
+    var ha = document.getElementById('homeActivity');
     if (!actArr.length) {
       ha.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-label">No activity yet</div></div>`;
     } else {
@@ -131,7 +131,7 @@ window.init_home = async function() {
 async function homeApprove(reqId, title, year, orig, btn) {
   btn.disabled = true; btn.textContent = '⏳…';
   try {
-    const d = await fetch('/api/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:reqId,title,year,original_title:orig})}).then(r=>r.json());
+    var d = await fetch('/api/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:reqId,title,year,original_title:orig})}).then(r=>r.json());
     if (d.ok) { showToast(`Searching for "${title}"…`,'info','Approved'); btn.textContent='⬇ Queued'; btn.style.opacity='0.5'; }
     else { showToast(d.error||'Failed','error'); btn.disabled=false; btn.textContent='▶ Download'; }
   } catch(e) { showToast('Failed','error'); btn.disabled=false; btn.textContent='▶ Download'; }

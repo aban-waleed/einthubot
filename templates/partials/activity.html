@@ -39,14 +39,14 @@
 </div>
 
 <script>
-const ABMAP2 = {seerr:'ab-seerr',search:'ab-search',download:'ab-download',library:'ab-library',system:'ab-system'};
-const DMAP2  = {success:'d-success',error:'d-error',pending:'d-pending',info:'d-info'};
+var ABMAP2 = {seerr:'ab-seerr',search:'ab-search',download:'ab-download',library:'ab-library',system:'ab-system'};
+var DMAP2  = {success:'d-success',error:'d-error',pending:'d-pending',info:'d-info'};
 
 async function loadAct() {
-  const el = document.getElementById('actList');
+  var el = document.getElementById('actList');
   el.innerHTML = `<div class="empty-state"><span class="spin"></span> Loading…</div>`;
   try {
-    const data = await fetch('/api/activity').then(r=>r.json());
+    var data = await fetch('/api/activity').then(r=>r.json());
     if (!data.length) { el.innerHTML=`<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-label">No activity yet</div></div>`; return; }
     el.innerHTML = data.map(a=>`
       <div class="activity-item">

@@ -324,7 +324,7 @@
 
 <script>
 // ── Theme definitions ─────────────────────────────────────────────────────────
-const THEMES_META = {
+var THEMES_META = {
   amber:    { name:'Amber',    accent:'#f0971e', bg:'#0a0a0f', surf:'#1a1a28', light:false, excl:false },
   ocean:    { name:'Ocean',    accent:'#3b82f6', bg:'#0a0f1a', surf:'#111c2e', light:false, excl:false },
   nebula:   { name:'Nebula',   accent:'#a855f7', bg:'#0d0a1a', surf:'#18112e', light:false, excl:false },
@@ -348,13 +348,13 @@ const THEMES_META = {
 };
 
 function buildThemeGrid() {
-  const current = window._currentTheme || localStorage.getItem('einthubot_theme') || 'amber';
-  const grid = document.getElementById('themeGrid');
+  var current = window._currentTheme || localStorage.getItem('einthubot_theme') || 'amber';
+  var grid = document.getElementById('themeGrid');
   if (!grid) return;
   grid.innerHTML = Object.entries(THEMES_META).map(([key, t]) => {
-    const accentDisp = t.gradTo ? `linear-gradient(135deg,${t.accent},${t.gradTo})` : t.accent;
-    const lineColor  = t.light ? '#ddddf0' : t.surf;
-    const footBg     = t.light ? '#e8e8f0' : '#060608';
+    var accentDisp = t.gradTo ? `linear-gradient(135deg,${t.accent},${t.gradTo})` : t.accent;
+    var lineColor  = t.light ? '#ddddf0' : t.surf;
+    var footBg     = t.light ? '#e8e8f0' : '#060608';
     return `<div class="theme-card ${key===current?'active':''}" onclick="pickTheme('${key}',this)">
       <div class="theme-preview" style="background:${t.bg};">
         <div class="tp-row">
@@ -374,7 +374,7 @@ function buildThemeGrid() {
   }).join('');
 }
 
-let _pendingTheme = null;
+var _pendingTheme = null;
 
 function pickTheme(name, el) {
   document.querySelectorAll('.theme-card').forEach(c => c.classList.remove('active'));
@@ -383,7 +383,7 @@ function pickTheme(name, el) {
   window.applyThemePreview(name);
   _pendingTheme = name;
   _isDirty = true;
-  const bar = document.getElementById('saveBar');
+  var bar = document.getElementById('saveBar');
   if (bar) bar.style.display = 'flex';
 }
 
@@ -394,7 +394,7 @@ function resetTheme() {
 
 // ── Toggle password visibility ─────────────────────────────────────────────────
 function togglePass(id, btn) {
-  const inp = document.getElementById(id);
+  var inp = document.getElementById(id);
   if (!inp) return;
   if (inp.type === 'password') {
     inp.type = 'text';
@@ -409,18 +409,18 @@ function togglePass(id, btn) {
 
 // ── Connection tests ──────────────────────────────────────────────────────────
 async function testConn(type) {
-  const elId = type === 'jellyfin' ? 'jellyfinConn' : 'seerrConn';
-  const el = document.getElementById(elId);
+  var elId = type === 'jellyfin' ? 'jellyfinConn' : 'seerrConn';
+  var el = document.getElementById(elId);
   if (!el) return;
   el.innerHTML = `<span class="conn-badge conn-unknown"><span class="spin"></span>Testing…</span>`;
   try {
     if (type === 'jellyfin') {
-      const r = await fetch('/api/library').then(r=>r.json());
+      var r = await fetch('/api/library').then(r=>r.json());
       el.innerHTML = Array.isArray(r)
         ? `<span class="conn-badge conn-ok">● Connected · ${r.length} movies</span>`
         : `<span class="conn-badge conn-err">● Failed</span>`;
     } else {
-      const r = await fetch('/api/requests').then(r=>r.json());
+      var r = await fetch('/api/requests').then(r=>r.json());
       el.innerHTML = Array.isArray(r)
         ? `<span class="conn-badge conn-ok">● Connected · ${r.length} requests</span>`
         : `<span class="conn-badge conn-err">● Failed</span>`;
@@ -438,8 +438,8 @@ async function settingsReLogin() {
   showToast('Retrying Einthusan login…', 'info');
   await fetch('/api/retry_login', { method:'POST' });
   setTimeout(async () => {
-    const d = await fetch('/api/status').then(r=>r.json());
-    const el = document.getElementById('einthusanConn');
+    var d = await fetch('/api/status').then(r=>r.json());
+    var el = document.getElementById('einthusanConn');
     if (el) el.innerHTML = d.logged_in
       ? `<span class="conn-badge conn-ok">● Online</span>`
       : `<span class="conn-badge conn-err">● Offline</span>`;
@@ -449,11 +449,11 @@ async function settingsReLogin() {
 // ── Load settings from server ─────────────────────────────────────────────────
 async function loadSettings() {
   try {
-    const d = await fetch('/api/settings').then(r=>r.json());
+    var d = await fetch('/api/settings').then(r=>r.json());
 
     // Fill fields — only if value exists and is not a placeholder
-    const fill = (id, val) => {
-      const el = document.getElementById(id);
+    var fill = (id, val) => {
+      var el = document.getElementById(id);
       if (!el || !val) return;
       // Never set dots as the actual value
       if (val.startsWith('•') || val === '........') return;
@@ -462,8 +462,8 @@ async function loadSettings() {
 
     fill('setEmail',       d.einthusan_email);
     // For masked fields — show badge if set, don't fill the input
-    const maskField = (id, val) => {
-      const el = document.getElementById(id);
+    var maskField = (id, val) => {
+      var el = document.getElementById(id);
       if (!el) return;
       if (!val || val.includes('\u2022') || val.includes('\u00b7') || val === '........') {
         // Value is set on server but we don't expose it
@@ -489,11 +489,11 @@ async function loadSettings() {
     maskField('setSeerrKey',    d.seerr_api_key);
     maskField('setTmdbKey',     d.tmdb_api_key);
 
-    const langEl = document.getElementById('setLang');
+    var langEl = document.getElementById('setLang');
     if (langEl && d.einthusan_language) langEl.value = d.einthusan_language;
 
     // Show Einthusan status
-    const es = document.getElementById('einthusanConn');
+    var es = document.getElementById('einthusanConn');
     if (es) es.innerHTML = d.logged_in !== undefined
       ? (d.logged_in ? `<span class="conn-badge conn-ok">● Online</span>` : `<span class="conn-badge conn-err">● Offline</span>`)
       : '';
@@ -503,8 +503,8 @@ async function loadSettings() {
 
 // ── Save settings to .env ─────────────────────────────────────────────────────
 async function saveSettings() {
-  const get = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
-  const payload = {
+  var get = id => { var el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  var payload = {
     einthusan_email:    get('setEmail'),
     einthusan_password: get('setPassword'),
     einthusan_language: get('setLang'),
@@ -517,14 +517,14 @@ async function saveSettings() {
     tmdb_api_key:       get('setTmdbKey'),
   };
   try {
-    const r = await fetch('/api/settings', {
+    var r = await fetch('/api/settings', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify(payload),
     }).then(r=>r.json());
     if (r.ok) {
       showToast('Settings saved to .env — restart container to apply', 'success', 'Saved');
-      const ok = document.getElementById('saveOk');
+      var ok = document.getElementById('saveOk');
       if (ok) { ok.classList.add('show'); setTimeout(()=>ok.classList.remove('show'), 6000); }
       // Commit pending theme to localStorage now that save succeeded
       if (_pendingTheme) {
@@ -542,7 +542,7 @@ async function saveSettings() {
       _originalTheme  = window._currentTheme || localStorage.getItem('einthubot_theme') || 'amber';
       _originalReveal = document.getElementById('revealToggle')?.checked || false;
       // NOW actually apply the reveal preference
-      const revealToggle = document.getElementById('revealToggle');
+      var revealToggle = document.getElementById('revealToggle');
       if (revealToggle) await applyRevealAfterSave(revealToggle.checked);
     } else {
       showToast(r.error || 'Failed to save', 'error');
@@ -554,31 +554,31 @@ async function saveSettings() {
 
 // ── Update save bar position when sidebar collapses ───────────────────────────
 function updateSaveBar() {
-  const sb = document.getElementById('sidebar');
-  const bar = document.getElementById('saveBar');
+  var sb = document.getElementById('sidebar');
+  var bar = document.getElementById('saveBar');
   if (sb && bar) {
-    const w = sb.classList.contains('collapsed') ? '60px' : '220px';
+    var w = sb.classList.contains('collapsed') ? '60px' : '220px';
     bar.style.left = w;
   }
 }
 // Observe sidebar class changes
-const obs = new MutationObserver(updateSaveBar);
-const sidebarEl = document.getElementById('sidebar');
+var obs = new MutationObserver(updateSaveBar);
+var sidebarEl = document.getElementById('sidebar');
 if (sidebarEl) obs.observe(sidebarEl, { attributes:true, attributeFilter:['class'] });
 updateSaveBar();
 
 // ── Change detection ─────────────────────────────────────────────────────────
-let _originalValues = {};
-let _isDirty = false;
-let _originalTheme  = null;
-let _originalReveal = false;
+var _originalValues = {};
+var _isDirty = false;
+var _originalTheme  = null;
+var _originalReveal = false;
 
 function snapshotValues() {
-  const ids = ['setEmail','setPassword','setLang','setDownloadDir','setPollInterval',
+  var ids = ['setEmail','setPassword','setLang','setDownloadDir','setPollInterval',
                'setJellyfinUrl','setJellyfinKey','setSeerrUrl','setSeerrKey','setTmdbKey'];
   _originalValues = {};
   ids.forEach(id => {
-    const el = document.getElementById(id);
+    var el = document.getElementById(id);
     if (el) _originalValues[id] = el.value;
   });
   // Also snapshot theme and reveal state
@@ -587,23 +587,23 @@ function snapshotValues() {
 }
 
 function checkDirty() {
-  const ids = Object.keys(_originalValues);
-  const dirty = ids.some(id => {
-    const el = document.getElementById(id);
+  var ids = Object.keys(_originalValues);
+  var dirty = ids.some(id => {
+    var el = document.getElementById(id);
     return el && el.value !== _originalValues[id];
   });
   if (dirty !== _isDirty) {
     _isDirty = dirty;
-    const bar = document.getElementById('saveBar');
+    var bar = document.getElementById('saveBar');
     if (bar) bar.style.display = dirty ? 'flex' : 'none';
   }
 }
 
 function attachChangeListeners() {
-  const ids = ['setEmail','setPassword','setLang','setDownloadDir','setPollInterval',
+  var ids = ['setEmail','setPassword','setLang','setDownloadDir','setPollInterval',
                'setJellyfinUrl','setJellyfinKey','setSeerrUrl','setSeerrKey','setTmdbKey'];
   ids.forEach(id => {
-    const el = document.getElementById(id);
+    var el = document.getElementById(id);
     if (el) {
       el.addEventListener('input',  checkDirty);
       el.addEventListener('change', checkDirty);
@@ -614,7 +614,7 @@ function attachChangeListeners() {
 function discardSettings() {
   // Restore original snapshot values
   Object.entries(_originalValues).forEach(([id, val]) => {
-    const el = document.getElementById(id);
+    var el = document.getElementById(id);
     if (el) {
       el.value = val;
       if (['setPassword','setJellyfinKey','setSeerrKey','setTmdbKey'].includes(id)) {
@@ -639,9 +639,9 @@ function discardSettings() {
   }
 
   // Restore original reveal toggle state
-  const toggle = document.getElementById('revealToggle');
+  var toggle = document.getElementById('revealToggle');
   if (toggle) {
-    const wasOn = localStorage.getItem('einthubot_reveal') === '1';
+    var wasOn = localStorage.getItem('einthubot_reveal') === '1';
     if (toggle.checked !== _originalReveal) {
       toggle.checked = _originalReveal;
       if (!_originalReveal) handleRevealToggle(false);
@@ -654,22 +654,22 @@ function discardSettings() {
 }
 
 // ── Reveal toggle ────────────────────────────────────────────────────────────
-const MASKED_FIELDS = [
+var MASKED_FIELDS = [
   { id:'setPassword',   key:'einthusan_password' },
   { id:'setJellyfinKey',key:'jellyfin_api_key' },
   { id:'setSeerrKey',   key:'seerr_api_key' },
   { id:'setTmdbKey',    key:'tmdb_api_key' },
 ];
 
-let _realValues = {};
-let _revealLoaded = false;
+var _realValues = {};
+var _revealLoaded = false;
 
 async function handleRevealToggle(checked) {
-  const label  = document.getElementById('revealLabel');
-  const hint   = document.getElementById('revealHint');
-  const status = document.getElementById('revealStatus');
+  var label  = document.getElementById('revealLabel');
+  var hint   = document.getElementById('revealHint');
+  var status = document.getElementById('revealStatus');
   _isDirty = true;
-  const bar = document.getElementById('saveBar');
+  var bar = document.getElementById('saveBar');
   if (bar) bar.style.display = 'flex';
   if (checked) {
     label.textContent       = 'Show sensitive values';
@@ -691,9 +691,9 @@ async function handleRevealToggle(checked) {
 
 // ── Apply reveal after save ───────────────────────────────────────────────────
 async function applyRevealAfterSave(checked) {
-  const label  = document.getElementById('revealLabel');
-  const hint   = document.getElementById('revealHint');
-  const status = document.getElementById('revealStatus');
+  var label  = document.getElementById('revealLabel');
+  var hint   = document.getElementById('revealHint');
+  var status = document.getElementById('revealStatus');
 
   localStorage.setItem('einthubot_reveal', checked ? '1' : '0');
 
@@ -706,7 +706,7 @@ async function applyRevealAfterSave(checked) {
         status.textContent      = 'Loading from server…';
       }
       try {
-        const d = await fetch('/api/settings/reveal').then(r=>r.json());
+        var d = await fetch('/api/settings/reveal').then(r=>r.json());
         if (d.ok) { _realValues = d.values; _revealLoaded = true; }
         else throw new Error(d.error || 'Failed');
       } catch(e) {
@@ -715,7 +715,7 @@ async function applyRevealAfterSave(checked) {
           status.style.background = 'rgba(224,59,59,0.15)';
           status.style.color      = '#e03b3b';
         }
-        const t = document.getElementById('revealToggle');
+        var t = document.getElementById('revealToggle');
         if (t) t.checked = false;
         localStorage.setItem('einthubot_reveal', '0');
         return;
@@ -723,20 +723,20 @@ async function applyRevealAfterSave(checked) {
     }
     // Fill fields masked — eye button reveals each one
     MASKED_FIELDS.forEach(f => {
-      const el = document.getElementById(f.id);
+      var el = document.getElementById(f.id);
       if (!el) return;
-      const val = _realValues[f.key];
+      var val = _realValues[f.key];
       if (val) {
         el.value      = val;
         el.type       = 'password';
         el.classList.add('masked');
         el.placeholder = '';
-        const wrap = el.closest('.input-wrap');
+        var wrap = el.closest('.input-wrap');
         if (wrap) {
-          const eye = wrap.querySelector('.eye-btn');
+          var eye = wrap.querySelector('.eye-btn');
           if (eye) { eye.style.opacity = '1'; eye.style.pointerEvents = 'auto'; eye.title = ''; }
         }
-        const badge = el.closest('.setting-row')?.querySelector('span[style*="Set"]');
+        var badge = el.closest('.setting-row')?.querySelector('span[style*="Set"]');
         if (badge) badge.remove();
       }
     });
@@ -751,15 +751,15 @@ async function applyRevealAfterSave(checked) {
   } else {
     // Hide and lock eye buttons — restore to text type so placeholder shows cleanly
     MASKED_FIELDS.forEach(f => {
-      const el = document.getElementById(f.id);
+      var el = document.getElementById(f.id);
       if (!el) return;
       el.value = '';
       el.type = 'text';
       el.classList.remove('masked');
       el.placeholder = 'Leave blank to keep current value';
-      const wrap = el.closest('.input-wrap');
+      var wrap = el.closest('.input-wrap');
       if (wrap) {
-        const eye = wrap.querySelector('.eye-btn');
+        var eye = wrap.querySelector('.eye-btn');
         if (eye) { eye.style.opacity = '0.3'; eye.style.pointerEvents = 'none'; eye.title = 'Enable show sensitive values first'; }
       }
     });
@@ -780,11 +780,11 @@ window.init_settings = async function() {
   attachChangeListeners();
   // Disable eye buttons until reveal toggle is on
   MASKED_FIELDS.forEach(f => {
-    const el = document.getElementById(f.id);
+    var el = document.getElementById(f.id);
     if (!el) return;
-    const wrap = el.closest('.input-wrap');
+    var wrap = el.closest('.input-wrap');
     if (wrap) {
-      const eyeBtn = wrap.querySelector('.eye-btn');
+      var eyeBtn = wrap.querySelector('.eye-btn');
       if (eyeBtn) {
         eyeBtn.style.opacity = '0.3';
         eyeBtn.style.pointerEvents = 'none';
@@ -794,8 +794,8 @@ window.init_settings = async function() {
   });
 
   // Restore last saved toggle state and apply it directly (no pending state on init)
-  const wasRevealed = localStorage.getItem('einthubot_reveal') === '1';
-  const toggle = document.getElementById('revealToggle');
+  var wasRevealed = localStorage.getItem('einthubot_reveal') === '1';
+  var toggle = document.getElementById('revealToggle');
   if (toggle) {
     toggle.checked = wasRevealed;
     if (wasRevealed) await applyRevealAfterSave(true);

@@ -53,8 +53,8 @@
 </div>
 
 <script>
-const RS = {pending:{l:'Pending',c:'rs-pending'},approved:{l:'Approved',c:'rs-approved'},processing:{l:'Processing',c:'rs-processing'},available:{l:'Available',c:'rs-available'},declined:{l:'Declined',c:'rs-declined'},partial:{l:'Partially Available',c:'rs-partial'}};
-let allReqs = [], reqFilter = 'all';
+var RS = {pending:{l:'Pending',c:'rs-pending'},approved:{l:'Approved',c:'rs-approved'},processing:{l:'Processing',c:'rs-processing'},available:{l:'Available',c:'rs-available'},declined:{l:'Declined',c:'rs-declined'},partial:{l:'Partially Available',c:'rs-partial'}};
+var allReqs = [], reqFilter = 'all';
 
 function setFilter(f, btn) {
   reqFilter = f;
@@ -64,15 +64,15 @@ function setFilter(f, btn) {
 }
 
 function renderReqs() {
-  const el = document.getElementById('reqList');
-  const list = reqFilter==='all' ? allReqs : allReqs.filter(r=>r.status===reqFilter);
+  var el = document.getElementById('reqList');
+  var list = reqFilter==='all' ? allReqs : allReqs.filter(r=>r.status===reqFilter);
   if (!list.length) { el.innerHTML=`<div class="empty-state"><div class="empty-icon">📥</div><div class="empty-label">No ${reqFilter==='all'?'':reqFilter+' '}requests</div></div>`; return; }
   el.innerHTML = list.map(req => {
-    const st = RS[req.status]||{l:req.status,c:'rs-pending'};
-    const isCompleted=req.einthubot_completed, dlStatus=req.download_status;
-    const isDown=['downloading','queued','pausing'].includes(dlStatus), isPaused=dlStatus==='paused';
-    const canApprove=!isCompleted&&!isDown&&!isPaused&&req.media_type==='movie';
-    let badge='';
+    var st = RS[req.status]||{l:req.status,c:'rs-pending'};
+    var isCompleted=req.einthubot_completed, dlStatus=req.download_status;
+    var isDown=['downloading','queued','pausing'].includes(dlStatus), isPaused=dlStatus==='paused';
+    var canApprove=!isCompleted&&!isDown&&!isPaused&&req.media_type==='movie';
+    var badge='';
     if(isCompleted)  badge=`<span class="req-status rs-completed">✓ Completed</span>`;
     else if(isDown)  badge=`<span class="req-status rs-downloading">⬇ Downloading</span>`;
     else if(isPaused)badge=`<span class="req-status rs-einthubot">⏸ Paused</span>`;
@@ -106,7 +106,7 @@ async function loadReqs() {
 async function reqApprove(reqId, title, year, orig, btn) {
   btn.disabled=true; btn.textContent='⏳ Searching…';
   try {
-    const d=await fetch('/api/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:reqId,title,year,original_title:orig})}).then(r=>r.json());
+    var d=await fetch('/api/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:reqId,title,year,original_title:orig})}).then(r=>r.json());
     if(d.ok){showToast(`Searching for "${title}"…`,'info','Approved');btn.textContent='⬇ Queued';btn.style.opacity='0.5';setTimeout(loadReqs,2000);}
     else{showToast(d.error||'Failed','error');btn.disabled=false;btn.textContent='▶ Download';}
   }catch(e){showToast('Failed','error');btn.disabled=false;btn.textContent='▶ Download';}
