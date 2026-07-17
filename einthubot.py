@@ -649,6 +649,11 @@ class EinthusanClient:
                 rec["total_mb"] = round(total / 1e6, 1)
                 mode       = "ab" if resume_from > 0 else "wb"
                 downloaded = resume_from
+                # Browser-style transfer stats: exponentially smoothed speed,
+                # ETA from the smoothed rate. Updated at most once per second.
+                speed_bps   = 0.0
+                stat_t      = time.time()
+                stat_bytes  = downloaded
                 with open(filename, mode) as f:
                     for chunk in r.iter_content(chunk_size=1024 * 256):
                         # Record may be popped by cancel/remove mid-transfer.
@@ -662,6 +667,8 @@ class EinthusanClient:
                                 "paused_at": downloaded,
                                 "size_mb":   round(downloaded / 1e6, 1),
                                 "progress":  int((downloaded / total) * 100) if total else 0,
+                                "speed_mbps": 0,
+                                "eta_seconds": None,
                             })
                             log_activity("download", title, f"Paused at {downloaded/1e6:.1f} MB", "info")
                             save_state()
@@ -672,6 +679,15 @@ class EinthusanClient:
                             progress = int((downloaded / total) * 100) if total else 0
                             rec["size_mb"]  = round(downloaded / 1e6, 1)
                             rec["progress"] = progress
+                            now = time.time()
+                            elapsed = now - stat_t
+                            if elapsed >= 1.0:
+                                inst = (downloaded - stat_bytes) / elapsed
+                                speed_bps = inst if speed_bps == 0 else (0.3 * inst + 0.7 * speed_bps)
+                                rec["speed_mbps"] = round(speed_bps / 1e6, 2)
+                                rec["eta_seconds"] = (int((total - downloaded) / speed_bps)
+                                                     if speed_bps > 0 and total else None)
+                                stat_t, stat_bytes = now, downloaded
             set_permissions(str(filename))
             set_permissions(str(folder))
             rec = downloads.get(dl_id)
@@ -685,6 +701,8 @@ class EinthusanClient:
                 "progress": 100,
                 "size_mb":  round(downloaded / 1e6, 1),
                 "finished": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "speed_mbps": 0,
+                "eta_seconds": None,
             })
             log_activity("download", title,
                          f"Downloaded {rec['size_mb']} MB → {filename}", "success")
@@ -696,7 +714,7 @@ class EinthusanClient:
             rec = downloads.get(dl_id)
             if rec is None:
                 return "cancelled"
-            rec.update({"status": "error", "error": str(e)})
+            rec.update({"status": "error", "error": str(e), "speed_mbps": 0, "eta_seconds": None})
             log_activity("download", title, f"Download failed: {e}", "error")
             save_state()
             return "error"

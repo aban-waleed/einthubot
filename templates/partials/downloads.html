@@ -66,6 +66,14 @@
 var dlPendingRemove = null;
 var _dlById = {};
 
+function fmtEta(sec){
+  if (sec == null || sec < 0 || !isFinite(sec)) return '';
+  sec = Math.round(sec);
+  if (sec >= 3600) { var h=Math.floor(sec/3600), m=Math.round((sec%3600)/60); return h+' hr '+m+' min left'; }
+  if (sec >= 60)   { var m=Math.floor(sec/60),   s=sec%60;                    return m+' min '+s+' sec left'; }
+  return sec+' sec left';
+}
+
 function dsc(s){return({downloading:'ds-downloading',completed:'ds-completed',error:'ds-error',queued:'ds-queued',paused:'ds-paused',pausing:'ds-pausing'})[s]||'ds-queued';}
 function dsl(s){return({downloading:'Downloading',completed:'Completed',error:'Error',queued:'Queued',paused:'Paused',pausing:'Pausing…'})[s]||s;}
 function barCls(s){return s==='error'?'errored':s==='paused'||s==='pausing'?'paused':'';}
@@ -89,7 +97,7 @@ function renderDl(dl) {
       <div class="dl-actions"><span class="dl-status ${dsc(dl.status)}">${dsl(dl.status)}</span>${acts}${showRm?`<button class="btn-ghost" onclick="dlOpenRemove('${id}')">🗑 Remove</button>`:''}</div>
     </div>
     <div class="prog-wrap"><div class="prog-bar ${barCls(dl.status)}" style="width:${p}%"></div></div>
-    <div class="prog-labels"><span>${p}%</span><span>${sz}</span></div>
+    <div class="prog-labels"><span>${p}%</span>${isDown&&dl.speed_mbps?`<span style="color:var(--accent);font-weight:600;">${dl.speed_mbps} MB/s · ${fmtEta(dl.eta_seconds)}</span>`:''}<span>${sz}</span></div>
   </div>`;
 }
 
