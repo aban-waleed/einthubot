@@ -5,6 +5,7 @@ EinthuBot - Einthusan Premium Downloader for Jellyfin
 import os
 import re
 import json
+import base64
 import time
 import shutil
 import logging
@@ -264,11 +265,52 @@ class EinthusanClient:
         })
         self.logged_in = False
 
-    def _fix_cdn_url(self, url: str) -> str:
-        fixed = re.sub(r'https?://[\d\.]+(/etv/content/)', r'https://cdn1.einthusan.io\1', url)
-        if fixed != url:
-            log.info("Rewrote CDN URL to cdn1.einthusan.io")
-        return fixed
+    CDN_FALLBACK_HOSTS = ["cdn1.einthusan.io", "cdn2.einthusan.io", "cdn3.einthusan.io"]
+
+    def _cdn_hosts_from_page(self, html: str) -> list[str]:
+        """The player page carries a base64 data-ejpingables attribute listing the
+        real CDN hosts (cdnN.einthusan.io). Parse it, then append the known
+        fallbacks so we always have candidates."""
+        hosts = []
+        m = re.search(r'data-ejpingables="([^"]+)"', html or "")
+        if m:
+            try:
+                decoded = base64.b64decode(m.group(1) + "===").decode("utf-8", "ignore")
+                hosts = re.findall(r'cdn\d+\.einthusan\.io', decoded)
+            except Exception as e:
+                log.warning("Could not decode data-ejpingables: %s", e)
+        out = []
+        for h in hosts + self.CDN_FALLBACK_HOSTS:
+            if h not in out:
+                out.append(h)
+        return out
+
+    def _resolve_cdn_url(self, url: str, page_html: str = "", referer: str = "") -> str:
+        """data-mp4-link points at a decoy IP that refuses connections. The file
+        lives on one of the cdnN.einthusan.io hosts - and not always the same one
+        (UHD files are often only on cdn2) - so probe each candidate with a 1-byte
+        range request and return the first that actually serves the file."""
+        m = re.match(r'https?://[^/]+(/etv/content/.*)', url)
+        if not m:
+            log.info("CDN resolve: URL not in /etv/content/ form, leaving as-is: %s", url)
+            return url
+        path = m.group(1)
+        for host in self._cdn_hosts_from_page(page_html):
+            candidate = f"https://{host}{path}"
+            try:
+                r = self.session.get(candidate, timeout=10, stream=True,
+                                     headers={"Range": "bytes=0-0",
+                                              "Referer": referer or Config.EINTHUSAN_BASE})
+                ctype = r.headers.get("Content-Type", "")
+                r.close()
+                if r.status_code in (200, 206) and "text/html" not in ctype:
+                    log.info("CDN probe: %s -> HTTP %s %s (selected)", host, r.status_code, ctype)
+                    return candidate
+                log.info("CDN probe: %s -> HTTP %s %s (rejected)", host, r.status_code, ctype)
+            except Exception as e:
+                log.info("CDN probe: %s -> error: %s", host, e)
+        log.warning("No CDN host serves %s - defaulting to cdn1 (download will likely fail)", path)
+        return f"https://cdn1.einthusan.io{path}"
 
     def login(self) -> bool:
         if not Config.EINTHUSAN_EMAIL or not Config.EINTHUSAN_PASSWORD:
@@ -365,34 +407,56 @@ class EinthusanClient:
             # Check if UHD is available on the movie page
             soup_check = BeautifulSoup(r.text, "html.parser")
             has_uhd = bool(soup_check.select_one("i.ultrahd"))
+            log.info("get_download_url: movie_id=%s lang=%s prefer_uhd=%s uhd_badge_on_page=%s",
+                     movie_id, lang, prefer_uhd, has_uhd)
 
             # Try UHD first if available and preferred
             if prefer_uhd and has_uhd:
                 try:
                     uhd_url = f"{Config.EINTHUSAN_BASE}/premium/movie/watch/{movie_id}/?lang={lang}&uhd=true"
+                    log.info("UHD path: fetching %s", uhd_url)
                     self.session.headers.update({"Referer": movie_url})
                     r_uhd = self.session.get(uhd_url, timeout=15)
                     if r_uhd.status_code == 200 and "UIVideoPlayer" in r_uhd.text:
                         soup_uhd = BeautifulSoup(r_uhd.text, "html.parser")
                         mp4_tag = soup_uhd.find(attrs={"data-mp4-link": True})
                         if mp4_tag:
-                            log.info("Using UHD source for movie %s", movie_id)
-                            return self._fix_cdn_url(mp4_tag["data-mp4-link"]), True
+                            log.info("UHD path: raw data-mp4-link = %s", mp4_tag["data-mp4-link"])
+                            final = self._resolve_cdn_url(mp4_tag["data-mp4-link"],
+                                                          page_html=r_uhd.text, referer=uhd_url)
+                            log.info("UHD path: final download URL = %s (is_uhd=True)", final)
+                            return final, True
+                        log.warning("UHD path: player page has no data-mp4-link - falling back to HD")
+                    else:
+                        log.warning("UHD path: page status=%s player_present=%s - falling back to HD",
+                                    r_uhd.status_code, "UIVideoPlayer" in r_uhd.text)
                 except Exception as ue:
                     log.warning("UHD fetch failed, falling back to HD: %s", ue)
+            elif prefer_uhd:
+                log.info("No UltraHD badge on movie page - using HD source")
 
             # Fall back to standard HD
             premium_url = f"{Config.EINTHUSAN_BASE}/premium/movie/watch/{movie_id}/?lang={lang}"
+            log.info("HD path: fetching %s", premium_url)
             self.session.headers.update({"Referer": movie_url})
             r2   = self.session.get(premium_url, timeout=15)
             r2.raise_for_status()
             soup = BeautifulSoup(r2.text, "html.parser")
             mp4_tag = soup.find(attrs={"data-mp4-link": True})
             if mp4_tag:
-                return self._fix_cdn_url(mp4_tag["data-mp4-link"]), False
+                log.info("HD path: raw data-mp4-link = %s", mp4_tag["data-mp4-link"])
+                final = self._resolve_cdn_url(mp4_tag["data-mp4-link"],
+                                              page_html=r2.text, referer=premium_url)
+                log.info("HD path: final download URL = %s (is_uhd=False)", final)
+                return final, False
             hls_tag = soup.find(attrs={"data-hls-link": True})
             if hls_tag:
-                return self._fix_cdn_url(hls_tag["data-hls-link"]), False
+                log.info("HD path: no mp4 link, using HLS link %s", hls_tag["data-hls-link"])
+                final = self._resolve_cdn_url(hls_tag["data-hls-link"],
+                                              page_html=r2.text, referer=premium_url)
+                log.info("HD path: final download URL = %s (is_uhd=False, hls)", final)
+                return final, False
+            log.error("No mp4 or hls link found on premium page for movie %s", movie_id)
             return None
         except Exception as e:
             log.error("Error fetching download URL: %s", e)
@@ -416,6 +480,7 @@ class EinthusanClient:
             log_activity("download", title, f"Starting → {filename.name}", "pending")
         else:
             log_activity("download", title, f"Resuming from {resume_from/1e6:.1f} MB", "pending")
+        log.info("download: '%s' streaming from %s", title, download_url)
         try:
             headers = {}
             if resume_from > 0:
@@ -576,6 +641,7 @@ jellyfin  = JellyfinClient()
 def run_download(dl_id: str, title: str, dl_url: str,
                  year: str = "", tmdb_id: Optional[int] = None,
                  resume_from: int = 0):
+    log.info("run_download %s: '%s' url=%s", dl_id, title, dl_url)
     while True:
         result = einthusan.download(dl_id, title, dl_url, year=year, tmdb_id=tmdb_id, resume_from=resume_from)
         if result == "paused":
