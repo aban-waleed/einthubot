@@ -64,6 +64,7 @@
 
 <script>
 var dlPendingRemove = null;
+var _dlById = {};
 
 function dsc(s){return({downloading:'ds-downloading',completed:'ds-completed',error:'ds-error',queued:'ds-queued',paused:'ds-paused',pausing:'ds-pausing'})[s]||'ds-queued';}
 function dsl(s){return({downloading:'Downloading',completed:'Completed',error:'Error',queued:'Queued',paused:'Paused',pausing:'Pausing…'})[s]||s;}
@@ -76,14 +77,16 @@ function renderDl(dl) {
   var uhdChip=dl.uhd?'<span class="uhd-chip">⬆ UHD</span>':'';
   var tm=dl.started?`Started ${(dl.started||'').split(' ')[1]}`:dl.queued?`Queued ${(dl.queued||'').split(' ')[1]}`:'';
   var fn=dl.finished?` · Finished ${(dl.finished||'').split(' ')[1]}`:'';
+  var err=dl.status==='error'&&dl.error?` · ${esc(dl.error)}`:'';
   var acts='';
   if(isDown) acts=`<button class="btn-pause" onclick="dlPause('${id}')">⏸ Pause</button><button class="btn-cancel" onclick="dlCancel('${id}')">✕ Cancel</button>`;
   if(isPaused) acts=`<button class="btn-resume" onclick="dlResume('${id}')">▶ Resume</button><button class="btn-cancel" onclick="dlCancel('${id}')">✕ Cancel</button>`;
+  if(dl.status==='error') acts=`<button class="btn-resume" onclick="dlRetry('${id}')">↻ Retry</button>`;
   var showRm=['completed','error'].includes(dl.status);
   return `<div class="dl-card">
     <div class="dl-header">
-      <div><div class="dl-title-row">${t}${dl.year?` <span style="color:var(--muted);font-weight:400;">(${esc(dl.year)})</span>`:''}${dl.tmdb_id?`<span class="tmdb-chip">tmdb-${dl.tmdb_id}</span>`:''}</div><div class="dl-meta">${tm}${fn}</div></div>
-      <div class="dl-actions"><span class="dl-status ${dsc(dl.status)}">${dsl(dl.status)}</span>${acts}${showRm?`<button class="btn-ghost" onclick="dlOpenRemove('${id}','${t}')">🗑 Remove</button>`:''}</div>
+      <div><div class="dl-title-row">${t}${dl.year?` <span style="color:var(--muted);font-weight:400;">(${esc(dl.year)})</span>`:''}${uhdChip}${dl.tmdb_id?`<span class="tmdb-chip">tmdb-${dl.tmdb_id}</span>`:''}</div><div class="dl-meta">${tm}${fn}${err}</div></div>
+      <div class="dl-actions"><span class="dl-status ${dsc(dl.status)}">${dsl(dl.status)}</span>${acts}${showRm?`<button class="btn-ghost" onclick="dlOpenRemove('${id}')">🗑 Remove</button>`:''}</div>
     </div>
     <div class="prog-wrap"><div class="prog-bar ${barCls(dl.status)}" style="width:${p}%"></div></div>
     <div class="prog-labels"><span>${p}%</span><span>${sz}</span></div>
@@ -92,6 +95,8 @@ function renderDl(dl) {
 
 async function refreshDls(data) {
   if (!data) data = await fetch('/api/downloads').then(r=>r.json());
+  _dlById = {};
+  data.forEach(d => { _dlById[d.id] = d; });
   var active  = data.filter(d=>['downloading','queued','paused','pausing'].includes(d.status));
   var history = data.filter(d=>['completed','error'].includes(d.status)).reverse();
   var ae = document.getElementById('activeDls');
@@ -104,7 +109,18 @@ async function refreshDls(data) {
 async function dlPause(id)  { await fetch(`/api/pause/${id}`,{method:'POST'}); showToast('Paused','info'); setTimeout(refreshDls,500); }
 async function dlResume(id) { await fetch(`/api/resume/${id}`,{method:'POST'}); showToast('Resumed','info'); setTimeout(refreshDls,500); }
 async function dlCancel(id) { await fetch(`/api/cancel/${id}`,{method:'POST'}); showToast('Cancelled','error'); setTimeout(refreshDls,500); }
-function dlOpenRemove(id, t) { dlPendingRemove=id; document.getElementById('dlRemoveMsg').textContent=`Remove "${t}" from history?`; document.getElementById('dlRemoveModal').classList.add('show'); }
+async function dlRetry(id)  {
+  var d = await fetch(`/api/retry/${id}`,{method:'POST'}).then(r=>r.json());
+  if (d.ok) showToast('Retrying download','info');
+  else showToast(d.error||'Retry failed','error');
+  setTimeout(refreshDls,500);
+}
+function dlOpenRemove(id) {
+  dlPendingRemove=id;
+  var t = (_dlById[id] && _dlById[id].title) || 'this download';
+  document.getElementById('dlRemoveMsg').textContent=`Remove "${t}" from history?`;
+  document.getElementById('dlRemoveModal').classList.add('show');
+}
 async function dlConfirmRemove(del) {
   if (!dlPendingRemove) return;
   await fetch(`/api/remove/${dlPendingRemove}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({delete_file:del})});

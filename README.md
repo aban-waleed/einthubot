@@ -12,17 +12,19 @@ A self-hosted tool that integrates [Einthusan.tv](https://einthusan.tv) Premium 
 
 - 🏠 **Home dashboard** — at-a-glance stats: library size, active downloads, pending requests and total storage used
 - 🔍 **Search** Einthusan across all languages (Hindi, Tamil, Telugu, Malayalam, Kannada, Bengali, Punjabi, Marathi)
-- 📥 **Requests tab** — view all Jellyseerr requests and approve them to trigger an automatic Einthusan download
+- 📥 **Requests tab** — view all Jellyseerr requests and approve them with a **match-confirmation step**: see exactly which Einthusan result was matched (with all candidates) and confirm or pick another before the download starts
 - ⬇️ **Downloads tab** — live progress bar, pause, resume, cancel with automatic file cleanup
 - 🎞️ **Library tab** — browse your Jellyfin **movies and TV shows** with TMDB posters, ratings, genres, cast and full detail views. Drill into shows → seasons → episodes, and delete from Jellyfin, disk, and Jellyseerr in one click
 - 📋 **Activity log** — full history of every search, match, download and Seerr event
-- ⚙️ **Settings tab** — edit all configuration from the browser (writes to `.env`), reveal/hide secrets, and pick from **20 themes** (13 standard + 7 animated exclusives)
+- ⚙️ **Settings tab** — edit all configuration from the browser (writes to `.env` and applies immediately), reveal/hide secrets, and pick from **21 themes** (13 standard + 8 animated exclusives)
 - 🔁 **Auto-sync with Jellyfin** — the watcher marks requests available in Jellyseerr once the movie appears in your Jellyfin library
 - 🧠 **Smart year-first matching** — prevents wrong movies (e.g. Don 1978 vs Don 2006)
 - 🎬 **TMDB integration** — automatic metadata lookup for proper Jellyfin folder naming (`Movie Title (Year) {tmdb-XXXXXXX}`)
 - 🖼️ **Image proxy** — serves Jellyfin artwork through the app so browsers can reach container-internal URLs
 - 🔒 **File permissions** — downloaded files are automatically set to `777` so Jellyfin can delete them
-- 🌐 **CDN failover** — automatically rewrites raw IP CDN URLs to `cdn1.einthusan.io` for reliable downloads
+- 🌐 **CDN failover** — decodes the player page's CDN host list and probes `cdn1/2/3.einthusan.io` to find the host that actually serves the file
+- 💾 **Persistent state** — download history and request tracking survive container restarts (`data/state.json`); interrupted downloads can be resumed with one click
+- ↻ **Retry & auto-scan** — failed downloads get a Retry button (resumes from the partial file), and Jellyfin library scans trigger automatically after each completed download
 - 🐳 **Docker** — runs as a single container alongside your existing media stack
 
 ---
@@ -211,7 +213,7 @@ You should see a green **Online · Premium** badge in the top right.
 | ⬇️ **Downloads** | Live progress bars, pause/resume/cancel, download history |
 | 🎞️ **Library** | Browse your Jellyfin **movies and TV shows** with TMDB posters. Open any title for full details — backdrop, cast, genres, overview. Expand shows into seasons and episodes. Delete from Jellyfin + disk + Seerr in one click |
 | 📋 **Activity** | Full log of every event |
-| ⚙️ **Settings** | Edit all `.env` configuration from the browser, reveal/hide secrets, and choose from 20 themes |
+| ⚙️ **Settings** | Edit all `.env` configuration from the browser, reveal/hide secrets, and choose from 21 themes |
 
 ---
 
@@ -305,9 +307,12 @@ All served by `einthubot.py`:
 | `GET` | `/api/search?q=&lang=` | Search Einthusan |
 | `POST` | `/api/download` | Download a specific Einthusan result |
 | `GET` | `/api/downloads` | Active/finished downloads |
-| `POST` | `/api/pause/<id>` · `/api/resume/<id>` · `/api/cancel/<id>` · `/api/remove/<id>` | Control a download |
+| `POST` | `/api/pause/<id>` · `/api/resume/<id>` · `/api/cancel/<id>` · `/api/remove/<id>` · `/api/retry/<id>` | Control a download |
+| `POST` | `/api/jellyfin/scan` | Trigger a Jellyfin library scan |
 | `GET` | `/api/requests` | Jellyseerr requests (enriched with TMDB) |
-| `POST` | `/api/approve` | Approve a request → search + download |
+| `POST` | `/api/approve` | Approve a request → search + download (automatic) |
+| `POST` | `/api/approve/preview` | Search + match a request, return candidates without downloading |
+| `POST` | `/api/approve/confirm` | Download a user-confirmed Einthusan result for a request |
 | `GET` | `/api/library` | Jellyfin movies |
 | `POST` | `/api/library/delete` | Remove a movie from Jellyfin + disk + Seerr |
 | `GET` | `/api/shows` | Jellyfin TV shows |
@@ -410,7 +415,7 @@ Make sure `JELLYFIN_API_KEY` and `JELLYFIN_URL` are set in both `.env` and `dock
 ## Notes
 
 - Requires an active **Einthusan Premium** subscription — the download feature is a premium-only feature of the platform
-- Downloads are streamed directly from Einthusan's CDN (`cdn1.einthusan.io`) to your server
+- Downloads are streamed directly from Einthusan's CDN (`cdnN.einthusan.io`, probed automatically) to your server
 - The Jellyseerr watcher polls for new pending requests every `POLL_INTERVAL` seconds — for immediate downloads use the Search or Requests tab manually
 - All downloaded files and folders are created with `777` permissions so Jellyfin can manage them
 

@@ -167,12 +167,19 @@ document.getElementById('showModal').addEventListener('click', function(e) {
 
 async function getJellyBase() {
   if (_jellyBase) return _jellyBase;
+  // JELLYFIN_URL is a Docker-internal hostname; the browser reaches Jellyfin
+  // on the same host it loaded this UI from (works on LAN and Tailscale).
+  var fallback = window.location.protocol + '//' + window.location.hostname + ':8096';
   try {
     var d = await fetch('/api/status').then(function(r){return r.json();});
-    _jellyBase = (d.jellyfin_url || 'http://localhost:8096')
-      .replace('http://jellyfin:8096', 'http://localhost:8096')
-      .replace('http://jellyfin', 'http://localhost');
-  } catch(e) { _jellyBase = 'http://localhost:8096'; }
+    var u = d.jellyfin_url || '';
+    // Only trust a configured URL that isn't a container hostname
+    if (u && !/\/\/(jellyfin|localhost|127\.0\.0\.1)([:/]|$)/.test(u)) {
+      _jellyBase = u.replace(/\/$/, '');
+    } else {
+      _jellyBase = fallback;
+    }
+  } catch(e) { _jellyBase = fallback; }
   return _jellyBase;
 }
 

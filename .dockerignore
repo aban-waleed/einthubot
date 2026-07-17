@@ -1,0 +1,15 @@
+.git
+.gitignore
+.claude
+.env
+.env.*
+!.env.example
+logs
+data
+docs
+*.pdf
+*.log
+__pycache__
+*.py[cod]
+venv
+.venv

@@ -9,6 +9,11 @@ services:
     volumes:
       - "${MEDIA_DIR:-/path/to/media/movies}:/downloads/einthusan"
       - ./logs:/app/logs
+      # Settings UI writes here; mounting it makes saves survive rebuilds
+      # and lets docker compose pick up changed values on recreate.
+      - ./.env:/app/.env
+      # Download history + request tracking survive restarts
+      - ./data:/app/data
     environment:
       # ── Einthusan Premium Account ──────────────────────────────────
       EINTHUSAN_EMAIL:    ${EINTHUSAN_EMAIL}

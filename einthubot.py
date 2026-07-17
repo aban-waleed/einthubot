@@ -38,6 +38,7 @@ class Config:
     TMDB_API_KEY       = os.getenv("TMDB_API_KEY", "")
 
 # ── Logging ─────────────────────────────────────────────────────────────────
+Path("logs").mkdir(exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -63,9 +64,58 @@ def new_download_id() -> str:
     download_counter += 1
     return f"dl_{download_counter}"
 
+# ── State persistence ────────────────────────────────────────────────────────
+STATE_DIR  = Path(os.getenv("STATE_DIR", "data"))
+STATE_FILE = STATE_DIR / "state.json"
+_state_lock = threading.Lock()
+
+def save_state():
+    """Snapshot download history and request tracking to disk (atomic write)."""
+    try:
+        with _state_lock:
+            STATE_DIR.mkdir(parents=True, exist_ok=True)
+            snap = {
+                "download_counter":      download_counter,
+                "approved_request_ids":  sorted(approved_request_ids),
+                "completed_request_ids": sorted(completed_request_ids),
+                "known_request_ids":     sorted(known_request_ids),
+                "downloads":             {k: dict(v) for k, v in list(downloads.items())},
+            }
+            tmp = STATE_FILE.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(snap))
+            tmp.replace(STATE_FILE)
+    except Exception as e:
+        log.warning("Could not save state: %s", e)
+
+def load_state():
+    global download_counter
+    try:
+        if not STATE_FILE.exists():
+            return
+        snap = json.loads(STATE_FILE.read_text())
+        download_counter = snap.get("download_counter", 0)
+        approved_request_ids.update(snap.get("approved_request_ids", []))
+        completed_request_ids.update(snap.get("completed_request_ids", []))
+        known_request_ids.update(snap.get("known_request_ids", []))
+        for dl_id, dl in snap.get("downloads", {}).items():
+            # Threads don't survive a restart — mark in-flight downloads as
+            # retryable errors (the Retry button resumes from the partial file).
+            if dl.get("status") in ("queued", "downloading", "pausing", "paused"):
+                dl["status"] = "error"
+                dl["error"]  = "Interrupted by restart - use Retry"
+            downloads[dl_id] = dl
+        log.info("Restored state: %d downloads, %d approved, %d completed requests",
+                 len(downloads), len(approved_request_ids), len(completed_request_ids))
+    except Exception as e:
+        log.warning("Could not load state: %s", e)
+
+_activity_counter = 0
+
 def log_activity(kind: str, title: str, msg: str, status: str = "info"):
+    global _activity_counter
+    _activity_counter += 1
     entry = {
-        "id":     len(activity_log),
+        "id":     _activity_counter,
         "time":   datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "kind":   kind,
         "title":  title,
@@ -104,11 +154,35 @@ def cleanup_download(dl_id: str, delete_files: bool = True):
             approved_request_ids.discard(request_id)
             completed_request_ids.discard(request_id)
     downloads.pop(dl_id, None)
+    cancel_flags.pop(dl_id, None)
+    pause_flags.pop(dl_id, None)
+    save_state()
 
 # ── TMDB lookup ───────────────────────────────────────────────────────────────
+_tmdb_cache: dict = {}
+
+def _tmdb_cache_get(key):
+    hit = _tmdb_cache.get(key)
+    if hit and hit[0] > time.time():
+        return hit[1]
+    return None
+
+def _tmdb_cache_put(key, value, ttl: int = 6 * 3600):
+    _tmdb_cache[key] = (time.time() + ttl, value)
+
+
+def _norm_title(s: str) -> str:
+    return re.sub(r'[^\w\s]', '', (s or '').lower()).strip()
+
+
 def get_tmdb_info(title: str, year: str) -> dict:
+    """Find the TMDB entry for a movie, verifying the candidate actually
+    matches the queried title/year. TMDB orders results by popularity and its
+    `year` param also matches re-release years, so blindly taking results[0]
+    can rename a movie entirely (e.g. Don (1978) -> Don't Look Now (1973))."""
+    fallback = {"title": title, "year": year, "tmdb_id": None}
     if not Config.TMDB_API_KEY:
-        return {"title": title, "year": year, "tmdb_id": None}
+        return fallback
     try:
         params = {"api_key": Config.TMDB_API_KEY, "query": title, "language": "en-US"}
         if year:
@@ -116,22 +190,53 @@ def get_tmdb_info(title: str, year: str) -> dict:
         r = requests.get("https://api.themoviedb.org/3/search/movie", params=params, timeout=10)
         r.raise_for_status()
         results = r.json().get("results", [])
-        if not results:
-            return {"title": title, "year": year, "tmdb_id": None}
-        best       = results[0]
+        if not results and year:
+            # Year filter can be too strict (Einthusan years are sometimes off)
+            params.pop("year")
+            r = requests.get("https://api.themoviedb.org/3/search/movie", params=params, timeout=10)
+            r.raise_for_status()
+            results = r.json().get("results", [])
+        q = _norm_title(title)
+        best, best_score = None, 0
+        for c in results[:10]:
+            ct = _norm_title(c.get("title"))
+            co = _norm_title(c.get("original_title"))
+            cy = (c.get("release_date") or "")[:4]
+            if ct == q or co == q:
+                score = 100
+            elif q and (q in ct or ct in q or (co and (q in co or co in q))):
+                score = 60
+            else:
+                continue  # unrelated title — never accept
+            if year and year.isdigit() and cy.isdigit():
+                diff = abs(int(cy) - int(year))
+                if diff == 0:
+                    score += 30
+                elif diff <= 1:
+                    score += 15
+                elif diff > 2:
+                    score -= 25
+            if score > best_score:
+                best, best_score = c, score
+        if not best:
+            log.warning("TMDB: no confident match for '%s' (%s) — keeping original name", title, year)
+            return fallback
         tmdb_id    = best.get("id")
         tmdb_title = best.get("title", title)
         tmdb_year  = (best.get("release_date") or "")[:4] or year
-        log.info("TMDB match: %s (%s) tmdb-%s", tmdb_title, tmdb_year, tmdb_id)
+        log.info("TMDB match: %s (%s) tmdb-%s [score %d]", tmdb_title, tmdb_year, tmdb_id, best_score)
         return {"title": tmdb_title, "year": tmdb_year, "tmdb_id": tmdb_id}
     except Exception as e:
         log.error("TMDB lookup error: %s", e)
-        return {"title": title, "year": year, "tmdb_id": None}
+        return fallback
 
 
 def get_tmdb_details_by_id(tmdb_id: int, media_type: str = "movie") -> dict:
     if not Config.TMDB_API_KEY or not tmdb_id:
         return {"title": "Unknown", "year": "", "poster": "", "original_title": ""}
+    cached = _tmdb_cache_get(("details", tmdb_id, media_type))
+    if cached is not None:
+        return cached
     try:
         endpoint = "movie" if media_type == "movie" else "tv"
         r = requests.get(
@@ -147,7 +252,9 @@ def get_tmdb_details_by_id(tmdb_id: int, media_type: str = "movie") -> dict:
             year           = date[:4]
             poster         = td.get("poster_path", "")
             poster_url     = f"https://image.tmdb.org/t/p/w200{poster}" if poster else ""
-            return {"title": title, "original_title": original_title, "year": year, "poster": poster_url}
+            details = {"title": title, "original_title": original_title, "year": year, "poster": poster_url}
+            _tmdb_cache_put(("details", tmdb_id, media_type), details)
+            return details
     except Exception as e:
         log.warning("TMDB details fetch failed for %s: %s", tmdb_id, e)
     return {"title": "Unknown", "year": "", "poster": "", "original_title": ""}
@@ -160,6 +267,10 @@ def fetch_tmdb_artwork(tmdb_id, media_type: str, rating, overview):
     """
     poster = backdrop = genres = ""
     if tmdb_id and Config.TMDB_API_KEY:
+        cached = _tmdb_cache_get(("artwork", tmdb_id, media_type))
+        if cached is not None:
+            poster, backdrop, genres, c_rating, c_overview = cached
+            return poster, backdrop, genres, rating or c_rating, overview or c_overview
         endpoint = "movie" if media_type == "movie" else "tv"
         try:
             tr = requests.get(
@@ -176,6 +287,9 @@ def fetch_tmdb_artwork(tmdb_id, media_type: str, rating, overview):
                     rating = td.get("vote_average")
                 if not overview:
                     overview = (td.get("overview") or "")[:300]
+                _tmdb_cache_put(("artwork", tmdb_id, media_type),
+                                (poster, backdrop, genres,
+                                 td.get("vote_average"), (td.get("overview") or "")[:300]))
         except Exception as te:
             log.warning("TMDB artwork fetch failed for %s: %s", tmdb_id, te)
     return poster, backdrop, genres, rating, overview
@@ -250,7 +364,17 @@ class JellyfinClient:
             return False
 
     def get_poster_url(self, item_id: str) -> str:
-        return f"{self.base}/Items/{item_id}/Images/Primary?maxHeight=300&api_key={Config.JELLYFIN_API_KEY}"
+        # Proxied through the app: JELLYFIN_URL is usually a Docker-internal
+        # hostname the browser can't reach, and the raw URL would embed the API key.
+        return f"/api/proxy/image/{item_id}"
+
+    def trigger_scan(self) -> bool:
+        try:
+            r = requests.post(f"{self.base}/Library/Refresh", headers=self.headers, timeout=10)
+            return r.status_code in (200, 204)
+        except Exception as e:
+            log.error("Jellyfin scan trigger error: %s", e)
+            return False
 
 # ── Einthusan client ─────────────────────────────────────────────────────────
 class EinthusanClient:
@@ -474,13 +598,11 @@ class EinthusanClient:
                                               page_html=r2.text, referer=premium_url)
                 log.info("HD path: final download URL = %s (is_uhd=False)", final)
                 return final, False
-            hls_tag = soup.find(attrs={"data-hls-link": True})
-            if hls_tag:
-                log.info("HD path: no mp4 link, using HLS link %s", hls_tag["data-hls-link"])
-                final = self._resolve_cdn_url(hls_tag["data-hls-link"],
-                                              page_html=r2.text, referer=premium_url)
-                log.info("HD path: final download URL = %s (is_uhd=False, hls)", final)
-                return final, False
+            if soup.find(attrs={"data-hls-link": True}):
+                # An HLS link is an m3u8 playlist, not a video file — saving it
+                # as .mp4 produces a broken "movie". Don't pretend it worked.
+                log.error("Movie %s only offers an HLS stream - direct download not supported", movie_id)
+                return None
             log.error("No mp4 or hls link found on premium page for movie %s", movie_id)
             return None
         except Exception as e:
@@ -506,54 +628,77 @@ class EinthusanClient:
         else:
             log_activity("download", title, f"Resuming from {resume_from/1e6:.1f} MB", "pending")
         log.info("download: '%s' streaming from %s", title, download_url)
+        save_state()
         try:
             headers = {}
             if resume_from > 0:
                 headers["Range"] = f"bytes={resume_from}-"
             with self.session.get(download_url, stream=True, timeout=60, headers=headers) as r:
                 r.raise_for_status()
-                total_from_header            = int(r.headers.get("content-length", 0))
-                total                        = total_from_header + resume_from
-                downloads[dl_id]["total_mb"] = round(total / 1e6, 1)
+                if resume_from > 0 and r.status_code != 206:
+                    # Server ignored the Range header — appending the full file
+                    # to the partial one would corrupt it. Start over.
+                    log.warning("download: server ignored Range request (HTTP %s) - restarting from 0",
+                                r.status_code)
+                    resume_from = 0
+                total_from_header = int(r.headers.get("content-length", 0))
+                total             = total_from_header + resume_from
+                rec = downloads.get(dl_id)
+                if rec is None:
+                    return "cancelled"
+                rec["total_mb"] = round(total / 1e6, 1)
                 mode       = "ab" if resume_from > 0 else "wb"
                 downloaded = resume_from
                 with open(filename, mode) as f:
                     for chunk in r.iter_content(chunk_size=1024 * 256):
-                        if cancel_flags.get(dl_id):
+                        # Record may be popped by cancel/remove mid-transfer.
+                        rec = downloads.get(dl_id)
+                        if rec is None or cancel_flags.get(dl_id):
                             log_activity("download", title, "Download cancelled", "error")
                             return "cancelled"
                         if pause_flags.get(dl_id):
-                            downloads[dl_id].update({
+                            rec.update({
                                 "status":    "paused",
                                 "paused_at": downloaded,
                                 "size_mb":   round(downloaded / 1e6, 1),
                                 "progress":  int((downloaded / total) * 100) if total else 0,
                             })
                             log_activity("download", title, f"Paused at {downloaded/1e6:.1f} MB", "info")
+                            save_state()
                             return "paused"
                         if chunk:
                             f.write(chunk)
                             downloaded += len(chunk)
                             progress = int((downloaded / total) * 100) if total else 0
-                            downloads[dl_id]["size_mb"]  = round(downloaded / 1e6, 1)
-                            downloads[dl_id]["progress"] = progress
+                            rec["size_mb"]  = round(downloaded / 1e6, 1)
+                            rec["progress"] = progress
             set_permissions(str(filename))
             set_permissions(str(folder))
-            request_id = downloads[dl_id].get("request_id")
+            rec = downloads.get(dl_id)
+            if rec is None:
+                return "cancelled"
+            request_id = rec.get("request_id")
             if request_id:
                 completed_request_ids.add(request_id)
-            downloads[dl_id].update({
+            rec.update({
                 "status":   "completed",
                 "progress": 100,
                 "size_mb":  round(downloaded / 1e6, 1),
                 "finished": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             })
             log_activity("download", title,
-                         f"Downloaded {downloads[dl_id]['size_mb']} MB → {filename}", "success")
+                         f"Downloaded {rec['size_mb']} MB → {filename}", "success")
+            save_state()
+            if jellyfin.trigger_scan():
+                log_activity("library", title, "Triggered Jellyfin library scan", "info")
             return "completed"
         except Exception as e:
-            downloads[dl_id].update({"status": "error", "error": str(e)})
+            rec = downloads.get(dl_id)
+            if rec is None:
+                return "cancelled"
+            rec.update({"status": "error", "error": str(e)})
             log_activity("download", title, f"Download failed: {e}", "error")
+            save_state()
             return "error"
 
 
@@ -643,18 +788,28 @@ def match_title(request_title: str, request_year: str,
             return best
 
         close_matches = [r for r in results
-                         if r.get("year","").strip()
+                         if r.get("year","").strip().isdigit() and ry.isdigit()
                          and abs(int(ry) - int(r["year"].strip())) <= 1]
         if close_matches:
             best = max(close_matches, key=title_score)
-            log.info("Close-year winner: '%s' (%s)", best["title"], best.get("year"))
-            return best
+            if title_score(best) >= 40:
+                log.info("Close-year winner: '%s' (%s)", best["title"], best.get("year"))
+                return best
+            log.warning("Close-year candidate '%s' has unrelated title — rejecting", best["title"])
 
-        log.warning("No year match found for %s — falling back to title only", ry)
+        log.warning("No year match found for %s — requiring exact title match", ry)
 
     best = max(results, key=title_score)
-    log.info("Title-only fallback winner: '%s' (%s)", best["title"], best.get("year"))
-    return best
+    # Without year confirmation, only accept an exact title match. A weak
+    # fallback here downloads the wrong movie (e.g. a 2026 request for
+    # "Welcome to the Jungle" must not match "Welcome" (2007)).
+    min_score = 90 if ry else 50
+    if title_score(best) >= min_score:
+        log.info("Title-only fallback winner: '%s' (%s)", best["title"], best.get("year"))
+        return best
+    log.warning("No confident match for '%s' (%s) — best candidate '%s' (%s) rejected",
+                request_title, ry, best["title"], best.get("year"))
+    return None
 
 
 # ── Watcher ───────────────────────────────────────────────────────────────────
@@ -670,27 +825,49 @@ def run_download(dl_id: str, title: str, dl_url: str,
     while True:
         result = einthusan.download(dl_id, title, dl_url, year=year, tmdb_id=tmdb_id, resume_from=resume_from)
         if result == "paused":
-            while pause_flags.get(dl_id) and not cancel_flags.get(dl_id):
+            while pause_flags.get(dl_id) and not cancel_flags.get(dl_id) and dl_id in downloads:
                 time.sleep(0.5)
-            if cancel_flags.get(dl_id):
+            if cancel_flags.get(dl_id) or dl_id not in downloads:
                 cleanup_download(dl_id)
                 log_activity("download", title, "Cancelled after pause", "error")
                 break
             resume_from                = downloads[dl_id].get("paused_at", 0)
             pause_flags[dl_id]         = False
             downloads[dl_id]["status"] = "downloading"
-            log_activity("download", title, f"Resuming from {resume_from/1e6:.1f} MB", "info")
             continue
         if result == "cancelled":
-            cleanup_download(dl_id)
+            # The cancel/remove endpoints already cleaned up if the record is
+            # gone; this covers cancellation seen mid-transfer.
+            if dl_id in downloads:
+                cleanup_download(dl_id)
             break
+        if result == "error":
+            # Un-track the request so the user can approve/retry it again.
+            rid = downloads.get(dl_id, {}).get("request_id")
+            if rid:
+                approved_request_ids.discard(rid)
+                save_state()
         break
+
+
+ALL_LANGUAGES = ["hindi", "tamil", "telugu", "malayalam", "kannada", "bengali", "punjabi", "marathi"]
 
 
 def approve_and_download(title: str, year: str,
                          original_title: str = "",
                          request_id: Optional[int] = None):
-    log_activity("seerr", title, f"Searching Einthusan for '{title}' ({year})…", "info")
+    ok = _approve_and_download(title, year, original_title=original_title, request_id=request_id)
+    if not ok and request_id:
+        # Un-track so a later approve can retry instead of "Already approved".
+        approved_request_ids.discard(request_id)
+        save_state()
+    return ok
+
+
+def search_and_match(title: str, year: str, original_title: str = ""):
+    """Search Einthusan (all languages if needed) and pick the best match.
+
+    Returns (deduped_results, best_match_or_None)."""
     search_titles = [title]
     if original_title and original_title.lower() != title.lower():
         search_titles.append(original_title)
@@ -700,47 +877,78 @@ def approve_and_download(title: str, year: str,
         if results:
             all_results.extend(results)
             log_activity("search", title, f"Found {len(results)} results for '{t}'", "info")
+    if not all_results:
+        # Not in the default language — sweep the others so e.g. a Tamil
+        # request still resolves when EINTHUSAN_LANGUAGE=hindi.
+        for lang in [l for l in ALL_LANGUAGES if l != Config.LANGUAGE]:
+            for t in search_titles:
+                results = einthusan.search(t, language=lang)
+                if results:
+                    all_results.extend(results)
+                    log_activity("search", title, f"Found {len(results)} results for '{t}' [{lang}]", "info")
+            if all_results:
+                break
     seen, deduped = set(), []
     for r in all_results:
         if r["url"] not in seen:
             seen.add(r["url"])
             deduped.append(r)
-    if not deduped:
-        log_activity("search", title, "Not found on Einthusan", "error")
-        return False
-    best = match_title(title, year, deduped, original_title=original_title)
-    if not best:
-        log_activity("search", title, "No suitable match found", "error")
-        return False
-    log_activity("search", title, f"Matched: '{best['title']}' ({best.get('year','?')})", "info")
-    dl_url_result = einthusan.get_download_url(best["url"])
+    best = match_title(title, year, deduped, original_title=original_title) if deduped else None
+    return deduped, best
+
+
+def start_download_from_source(movie_url: str, title: str, year: str,
+                               tmdb_id: Optional[int] = None,
+                               request_id: Optional[int] = None) -> bool:
+    """Resolve an Einthusan movie page to a CDN URL and start the download
+    thread. Title/year/tmdb_id are used as-is for the Jellyfin naming."""
+    dl_url_result = einthusan.get_download_url(movie_url)
     dl_url = dl_url_result[0] if isinstance(dl_url_result, tuple) else dl_url_result
     is_uhd = dl_url_result[1] if isinstance(dl_url_result, tuple) else False
     if not dl_url:
         log_activity("download", title, "Could not find download link", "error")
         return False
-    tmdb  = get_tmdb_info(best["title"], best.get("year", year))
     dl_id = new_download_id()
     downloads[dl_id] = {
-        "id": dl_id, "title": tmdb["title"], "year": tmdb["year"],
-        "tmdb_id": tmdb["tmdb_id"], "status": "queued",
+        "id": dl_id, "title": title, "year": year,
+        "tmdb_id": tmdb_id, "status": "queued",
         "progress": 0, "size_mb": 0, "total_mb": 0,
         "queued": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "request_id": request_id,
+        "movie_url": movie_url,
+        "uhd": is_uhd,
     }
     cancel_flags[dl_id] = False
     pause_flags[dl_id]  = False
-    log_activity("download", tmdb["title"],
-                 f"TMDB: {tmdb['title']} ({tmdb['year']}) tmdb-{tmdb['tmdb_id']}", "info")
     threading.Thread(
         target=run_download,
-        args=(dl_id, tmdb["title"], dl_url),
-        kwargs={"year": tmdb["year"], "tmdb_id": tmdb["tmdb_id"]},
+        args=(dl_id, title, dl_url),
+        kwargs={"year": year, "tmdb_id": tmdb_id},
         daemon=True,
     ).start()
     if request_id:
         approved_request_ids.add(request_id)
+    save_state()
     return True
+
+
+def _approve_and_download(title: str, year: str,
+                          original_title: str = "",
+                          request_id: Optional[int] = None):
+    log_activity("seerr", title, f"Searching Einthusan for '{title}' ({year})…", "info")
+    deduped, best = search_and_match(title, year, original_title)
+    if not deduped:
+        log_activity("search", title, "Not found on Einthusan", "error")
+        return False
+    if not best:
+        log_activity("search", title, "No suitable match found", "error")
+        return False
+    log_activity("search", title, f"Matched: '{best['title']}' ({best.get('year','?')})", "info")
+    tmdb = get_tmdb_info(best["title"], best.get("year", year))
+    log_activity("download", tmdb["title"],
+                 f"TMDB: {tmdb['title']} ({tmdb['year']}) tmdb-{tmdb['tmdb_id']}", "info")
+    return start_download_from_source(best["url"], tmdb["title"], tmdb["year"],
+                                      tmdb_id=tmdb["tmdb_id"], request_id=request_id)
 
 
 def process_request(req: dict):
@@ -748,20 +956,27 @@ def process_request(req: dict):
     media      = req.get("media", {})
     media_type = media.get("mediaType", req.get("type", "movie"))
     if media_type != "movie":
+        known_request_ids.add(rid)
         return
     tmdb_id = media.get("tmdbId")
+    title = year = original_title = ""
     if tmdb_id and Config.TMDB_API_KEY:
         details        = get_tmdb_details_by_id(tmdb_id, "movie")
         title          = details["title"]
         year           = details["year"]
         original_title = details.get("original_title", "")
-    else:
-        title = "Unknown"
-        year  = ""
-        original_title = ""
+    if not title or title == "Unknown":
+        # Without a resolvable title, searching Einthusan for "Unknown"
+        # can only ever download the wrong movie.
+        log_activity("seerr", f"Request #{rid}",
+                     "Could not resolve title (missing TMDB key or id) — skipping", "error")
+        known_request_ids.add(rid)
+        save_state()
+        return
     log_activity("seerr", title, f"New request #{rid} detected", "info")
     approve_and_download(title, year, original_title=original_title, request_id=rid)
     known_request_ids.add(rid)
+    save_state()
 
 
 def watcher_loop():
@@ -791,6 +1006,11 @@ def watcher_loop():
             for req in all_reqs:
                 rid    = req.get("id")
                 media  = req.get("media", {})
+                # Movie and TV TMDB ids are separate namespaces that overlap
+                # numerically — only compare movie requests against the
+                # movie library or a TV request can be wrongly marked available.
+                if media.get("mediaType", req.get("type", "movie")) != "movie":
+                    continue
                 tmdb_id = media.get("tmdbId")
                 status  = media.get("status")  # 3=partial, 4=available, 5=processing
 
@@ -799,6 +1019,7 @@ def watcher_loop():
                     # Mark as completed in our tracking
                     if rid not in completed_request_ids:
                         completed_request_ids.add(rid)
+                        save_state()
                         log.info("Auto-completed request %d (tmdb-%s found in Jellyfin)", rid, tmdb_id)
                     # Tell Seerr it's available if not already
                     if status not in (3, 4, 5):
@@ -992,12 +1213,70 @@ def api_approve():
         return jsonify({"ok": False, "error": "No title"}), 400
     if request_id in approved_request_ids:
         return jsonify({"ok": False, "error": "Already approved"}), 400
+    # Claim the request immediately so a double-click can't start two downloads;
+    # approve_and_download un-claims it on failure.
+    if request_id:
+        approved_request_ids.add(request_id)
     threading.Thread(
         target=approve_and_download,
         args=(title, year),
         kwargs={"original_title": original_title, "request_id": request_id},
         daemon=True,
     ).start()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/approve/preview", methods=["POST"])
+def api_approve_preview():
+    """Search Einthusan and return the best match plus all candidates —
+    no download is started; the user confirms (or overrides) first."""
+    data           = flask_request.get_json(force=True)
+    title          = data.get("title", "")
+    year           = data.get("year", "")
+    original_title = data.get("original_title", "")
+    request_id     = data.get("request_id")
+    if not title:
+        return jsonify({"ok": False, "error": "No title"}), 400
+    if request_id in approved_request_ids:
+        return jsonify({"ok": False, "error": "Already approved"}), 400
+    if not einthusan.logged_in:
+        einthusan.login()
+    candidates, best = search_and_match(title, year, original_title)
+    if not candidates:
+        log_activity("search", title, "Not found on Einthusan", "error")
+        return jsonify({"ok": False, "error": "Not found on Einthusan"})
+    return jsonify({
+        "ok":         True,
+        "match_url":  best["url"] if best else None,
+        "candidates": candidates,
+    })
+
+
+@app.route("/api/approve/confirm", methods=["POST"])
+def api_approve_confirm():
+    """Start a request download from a user-confirmed Einthusan result.
+    Naming comes from the request's own TMDB metadata, not another lookup."""
+    data       = flask_request.get_json(force=True)
+    request_id = data.get("request_id")
+    movie_url  = data.get("url", "")
+    title      = data.get("title", "")
+    year       = data.get("year", "")
+    tmdb_id    = data.get("tmdb_id")
+    if not movie_url or not title:
+        return jsonify({"ok": False, "error": "Missing url or title"}), 400
+    if request_id and request_id in approved_request_ids:
+        return jsonify({"ok": False, "error": "Already approved"}), 400
+    # Claim immediately so a double-click can't start two downloads
+    if request_id:
+        approved_request_ids.add(request_id)
+    log_activity("seerr", title, f"Match confirmed — downloading from {movie_url}", "info")
+    def _do():
+        ok = start_download_from_source(movie_url, title, str(year or ""),
+                                        tmdb_id=tmdb_id, request_id=request_id)
+        if not ok and request_id:
+            approved_request_ids.discard(request_id)
+            save_state()
+    threading.Thread(target=_do, daemon=True).start()
     return jsonify({"ok": True})
 
 @app.route("/api/search")
@@ -1024,6 +1303,7 @@ def api_download():
         "id": dl_id, "title": title, "year": year,
         "status": "queued", "progress": 0, "size_mb": 0, "total_mb": 0,
         "queued": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "movie_url": movie_url,
     }
     cancel_flags[dl_id] = False
     pause_flags[dl_id]  = False
@@ -1031,20 +1311,79 @@ def api_download():
         dl_url_result = einthusan.get_download_url(movie_url)
         dl_url = dl_url_result[0] if isinstance(dl_url_result, tuple) else dl_url_result
         is_uhd = dl_url_result[1] if isinstance(dl_url_result, tuple) else False
+        rec = downloads.get(dl_id)
+        if rec is None:
+            return
         if not dl_url:
-            downloads[dl_id]["status"] = "error"
+            rec.update({"status": "error", "error": "No download URL found"})
             log_activity("download", title, "No download URL found", "error")
+            save_state()
             return
         tmdb = get_tmdb_info(title, year)
-        downloads[dl_id]["title"]   = tmdb["title"]
-        downloads[dl_id]["year"]    = tmdb["year"]
-        downloads[dl_id]["tmdb_id"] = tmdb["tmdb_id"]
+        rec["title"]   = tmdb["title"]
+        rec["year"]    = tmdb["year"]
+        rec["tmdb_id"] = tmdb["tmdb_id"]
+        rec["uhd"]     = is_uhd
         log_activity("download", tmdb["title"],
                      f"TMDB: {tmdb['title']} ({tmdb['year']}) tmdb-{tmdb['tmdb_id']}", "info")
         run_download(dl_id, tmdb["title"], dl_url, year=tmdb["year"], tmdb_id=tmdb["tmdb_id"])
     threading.Thread(target=_do, daemon=True).start()
     log_activity("download", title, "Queued for download", "pending")
     return jsonify({"ok": True, "dl_id": dl_id})
+
+
+@app.route("/api/retry/<dl_id>", methods=["POST"])
+def api_retry(dl_id):
+    dl = downloads.get(dl_id)
+    if not dl:
+        return jsonify({"ok": False, "error": "Not found"}), 404
+    if dl.get("status") != "error":
+        return jsonify({"ok": False, "error": "Only failed downloads can be retried"}), 400
+    cancel_flags[dl_id] = False
+    pause_flags[dl_id]  = False
+    dl.pop("error", None)
+    dl["status"] = "queued"
+    title = dl.get("title", "")
+    def _do():
+        # Prefer re-resolving from the movie page — stored CDN URLs carry
+        # expiring tokens. Fall back to the stored URL for old records.
+        dl_url = dl.get("download_url") or None
+        is_uhd = dl.get("uhd", False)
+        movie_url = dl.get("movie_url", "")
+        if movie_url:
+            res = einthusan.get_download_url(movie_url)
+            fresh = res[0] if isinstance(res, tuple) else res
+            if isinstance(res, tuple):
+                is_uhd = res[1]
+            if fresh:
+                dl_url = fresh
+        rec = downloads.get(dl_id)
+        if rec is None:
+            return
+        if not dl_url:
+            rec.update({"status": "error", "error": "Could not refresh download URL"})
+            log_activity("download", title, "Retry failed: no download URL", "error")
+            save_state()
+            return
+        rec["uhd"] = is_uhd
+        resume_from = 0
+        fn = rec.get("filename", "")
+        if fn and Path(fn).exists():
+            resume_from = Path(fn).stat().st_size
+        run_download(dl_id, title, dl_url,
+                     year=rec.get("year", ""), tmdb_id=rec.get("tmdb_id"),
+                     resume_from=resume_from)
+    threading.Thread(target=_do, daemon=True).start()
+    log_activity("download", title, "Retrying download", "info")
+    return jsonify({"ok": True})
+
+
+@app.route("/api/jellyfin/scan", methods=["POST"])
+def api_jellyfin_scan():
+    ok = jellyfin.trigger_scan()
+    if ok:
+        log_activity("library", "Jellyfin", "Library scan triggered", "success")
+    return jsonify({"ok": ok})
 
 @app.route("/api/pause/<dl_id>", methods=["POST"])
 def api_pause(dl_id):
@@ -1100,6 +1439,7 @@ def api_status():
         "language":       Config.LANGUAGE,
         "tmdb_enabled":   bool(Config.TMDB_API_KEY),
         "jellyfin_enabled": bool(Config.JELLYFIN_API_KEY),
+        "jellyfin_url":   Config.JELLYFIN_URL,
         "activity_count": len(activity_log),
         "tmdb_api_key": Config.TMDB_API_KEY,
     })
@@ -1200,11 +1540,36 @@ def api_settings_save():
     try:
         env_path.write_text("".join(lines))
         log.info("Settings saved to %s", env_path)
+        _apply_settings(existing)
         log_activity("system", "EinthuBot", "Settings saved via Web UI", "success")
         return jsonify({"ok": True, "path": str(env_path)})
     except Exception as e:
         log.error("Failed to save .env: %s", e)
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+def _apply_settings(env: dict):
+    """Apply saved settings to the running process — Config is only read from
+    the environment at startup, so without this a save would do nothing until
+    the container is recreated."""
+    Config.EINTHUSAN_EMAIL    = env.get("EINTHUSAN_EMAIL",    Config.EINTHUSAN_EMAIL)
+    Config.EINTHUSAN_PASSWORD = env.get("EINTHUSAN_PASSWORD", Config.EINTHUSAN_PASSWORD)
+    Config.LANGUAGE           = env.get("EINTHUSAN_LANGUAGE", Config.LANGUAGE)
+    Config.DOWNLOAD_DIR       = env.get("DOWNLOAD_DIR",       Config.DOWNLOAD_DIR)
+    Config.JELLYFIN_URL       = env.get("JELLYFIN_URL",       Config.JELLYFIN_URL)
+    Config.JELLYFIN_API_KEY   = env.get("JELLYFIN_API_KEY",   Config.JELLYFIN_API_KEY)
+    Config.SEERR_URL          = env.get("SEERR_URL",          Config.SEERR_URL)
+    Config.SEERR_API_KEY      = env.get("SEERR_API_KEY",      Config.SEERR_API_KEY)
+    Config.TMDB_API_KEY       = env.get("TMDB_API_KEY",       Config.TMDB_API_KEY)
+    try:
+        Config.POLL_INTERVAL = int(env.get("POLL_INTERVAL", Config.POLL_INTERVAL))
+    except (TypeError, ValueError):
+        pass
+    # Rebuild client state that was captured at construction time
+    jellyfin.base    = Config.JELLYFIN_URL.rstrip("/")
+    jellyfin.headers = {"X-Emby-Token": Config.JELLYFIN_API_KEY, "Content-Type": "application/json"}
+    seerr.base       = Config.SEERR_URL.rstrip("/")
+    seerr.headers    = {"X-Api-Key": Config.SEERR_API_KEY, "Content-Type": "application/json"}
 
 
 @app.route("/api/settings/reveal", methods=["GET"])
@@ -1432,6 +1797,7 @@ def api_storage():
 if __name__ == "__main__":
     Path("logs").mkdir(exist_ok=True)
     Path(Config.DOWNLOAD_DIR).mkdir(parents=True, exist_ok=True)
+    load_state()
     t = threading.Thread(target=watcher_loop, daemon=True)
     t.start()
     log.info("EinthuBot Web UI → http://0.0.0.0:%d", Config.WEB_PORT)

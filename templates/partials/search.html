@@ -62,6 +62,27 @@ window.init_search = function() {
   document.getElementById('searchInput').focus();
 };
 
+var _searchResults = [];
+
+function _normTitle(s){return String(s||'').toLowerCase().replace(/[^\w\s]/g,'').trim();}
+
+async function _searchOwnership() {
+  // Best-effort: which results are already in Jellyfin or downloading?
+  var lib = [], dls = [];
+  try { lib = await fetch('/api/library').then(r=>r.json()); if (!Array.isArray(lib)) lib = []; } catch(e) {}
+  try { dls = await fetch('/api/downloads').then(r=>r.json()); if (!Array.isArray(dls)) dls = []; } catch(e) {}
+  return { lib: lib, dls: dls.filter(d=>d.status!=='error') };
+}
+
+function _ownState(item, own) {
+  var nt = _normTitle(item.title), yr = String(item.year||'');
+  var inLib = own.lib.some(m => _normTitle(m.title) === nt && (!yr || String(m.year||'') === yr));
+  if (inLib) return 'library';
+  var inDl = own.dls.some(d => (d.movie_url && d.movie_url === item.url) ||
+                               (_normTitle(d.title) === nt && (!yr || String(d.year||'') === yr)));
+  return inDl ? 'downloading' : '';
+}
+
 async function doSearch() {
   var q = document.getElementById('searchInput').value.trim();
   var lang = document.getElementById('langSelect').value;
@@ -76,6 +97,7 @@ async function doSearch() {
     if (!results.length) { el.innerHTML=`<div class="empty-state"><div class="empty-icon">😕</div><div class="empty-label">No results for "${esc(q)}"</div></div>`; return; }
 
     var key = await getTmdbKey();
+    var own = await _searchOwnership();
     var enriched = await Promise.all(results.map(async item => {
       if (!key || !item.year) return {...item, tmdb:null};
       try {
@@ -83,11 +105,18 @@ async function doSearch() {
         return {...item, tmdb: tr.results?.[0]||null};
       } catch(e) { return {...item, tmdb:null}; }
     }));
+    _searchResults = enriched;
 
-    el.innerHTML = enriched.map(item => {
+    el.innerHTML = enriched.map((item, i) => {
       var posterSrc = item.tmdb?.poster_path ? `${TMDB}w92${item.tmdb.poster_path}` : item.thumb||'';
       var rating    = item.tmdb?.vote_average ? Number(item.tmdb.vote_average).toFixed(1) : '';
       var genres    = (item.tmdb?.genre_ids||[]).slice(0,2).map(id=>genreMap[id]).filter(Boolean);
+      var state     = _ownState(item, own);
+      var action    = state === 'library'
+        ? `<span class="tag" style="background:rgba(59,212,122,0.15);color:var(--success);padding:6px 12px;">✓ In library</span>`
+        : state === 'downloading'
+          ? `<span class="tag" style="background:rgba(91,141,238,0.15);color:var(--info);padding:6px 12px;">⬇ Downloading</span>`
+          : `<button class="btn btn-accent btn-sm" onclick="searchQueueDl(${i})">↓ Download</button>`;
       return `
         <div class="result-item">
           ${posterSrc?`<img class="result-thumb" src="${esc(posterSrc)}" alt="" onerror="this.style.display='none'">`:`<div class="result-thumb-ph">🎬</div>`}
@@ -101,7 +130,7 @@ async function doSearch() {
               <span class="tag tag-lang">${esc(item.language)}</span>
             </div>
           </div>
-          <button class="btn btn-accent btn-sm" onclick='searchQueueDl(${JSON.stringify(item.title)},${JSON.stringify(item.url)},${JSON.stringify(item.year||"")})'>↓ Download</button>
+          ${action}
         </div>`;
     }).join('');
   } catch(e) {
@@ -109,9 +138,11 @@ async function doSearch() {
   } finally { btn.innerHTML='Search'; btn.disabled=false; }
 }
 
-async function searchQueueDl(title, url, year) {
-  var d = await fetch('/api/download',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,url,year})}).then(r=>r.json());
-  if (d.ok) showToast(`Queued: ${title}`,'success','Download queued');
+async function searchQueueDl(i) {
+  var item = _searchResults[i];
+  if (!item) return;
+  var d = await fetch('/api/download',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:item.title,url:item.url,year:item.year||''})}).then(r=>r.json());
+  if (d.ok) showToast(`Queued: ${item.title}`,'success','Download queued');
   else showToast(d.error||'Failed','error');
 }
 </script>

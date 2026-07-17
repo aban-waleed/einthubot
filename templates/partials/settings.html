@@ -314,7 +314,7 @@
   <div>
     <div style="font-size:13px;font-weight:600;color:var(--text);">You have unsaved changes</div>
     <div class="save-hint">Changes will be written to your .env file on the server</div>
-    <div class="save-ok" id="saveOk">✓ Saved to .env — restart the container to apply changes</div>
+    <div class="save-ok" id="saveOk">✓ Saved to .env and applied — the web port needs a container restart</div>
   </div>
   <div style="display:flex;gap:10px;">
     <button class="btn btn-outline" onclick="discardSettings()">Discard</button>
@@ -431,7 +431,13 @@ async function testConn(type) {
 }
 
 async function triggerScan() {
-  showToast('Library scan triggered in Jellyfin', 'info');
+  try {
+    var d = await fetch('/api/jellyfin/scan', { method:'POST' }).then(r=>r.json());
+    if (d.ok) showToast('Library scan triggered in Jellyfin', 'success');
+    else showToast('Could not trigger scan — check Jellyfin connection', 'error');
+  } catch(e) {
+    showToast('Could not trigger scan — check Jellyfin connection', 'error');
+  }
 }
 
 async function settingsReLogin() {
@@ -492,11 +498,14 @@ async function loadSettings() {
     var langEl = document.getElementById('setLang');
     if (langEl && d.einthusan_language) langEl.value = d.einthusan_language;
 
-    // Show Einthusan status
-    var es = document.getElementById('einthusanConn');
-    if (es) es.innerHTML = d.logged_in !== undefined
-      ? (d.logged_in ? `<span class="conn-badge conn-ok">● Online</span>` : `<span class="conn-badge conn-err">● Offline</span>`)
-      : '';
+    // Login state lives on /api/status, not /api/settings
+    try {
+      var st = await fetch('/api/status').then(r=>r.json());
+      var es = document.getElementById('einthusanConn');
+      if (es) es.innerHTML = st.logged_in
+        ? `<span class="conn-badge conn-ok">● Online</span>`
+        : `<span class="conn-badge conn-err">● Offline</span>`;
+    } catch(e) {}
 
   } catch(e) { console.error('loadSettings error', e); }
 }
@@ -523,7 +532,7 @@ async function saveSettings() {
       body: JSON.stringify(payload),
     }).then(r=>r.json());
     if (r.ok) {
-      showToast('Settings saved to .env — restart container to apply', 'success', 'Saved');
+      showToast('Settings saved and applied', 'success', 'Saved');
       var ok = document.getElementById('saveOk');
       if (ok) { ok.classList.add('show'); setTimeout(()=>ok.classList.remove('show'), 6000); }
       // Commit pending theme to localStorage now that save succeeded
@@ -540,10 +549,6 @@ async function saveSettings() {
       document.getElementById('saveBar').style.display = 'none';
       snapshotValues();
       _originalTheme  = window._currentTheme || localStorage.getItem('einthubot_theme') || 'amber';
-      _originalReveal = document.getElementById('revealToggle')?.checked || false;
-      // NOW actually apply the reveal preference
-      var revealToggle = document.getElementById('revealToggle');
-      if (revealToggle) await applyRevealAfterSave(revealToggle.checked);
     } else {
       showToast(r.error || 'Failed to save', 'error');
     }
@@ -561,10 +566,12 @@ function updateSaveBar() {
     bar.style.left = w;
   }
 }
-// Observe sidebar class changes
-var obs = new MutationObserver(updateSaveBar);
+// Observe sidebar class changes — disconnect any observer from a previous
+// visit to this tab so they don't accumulate for the session lifetime
+if (window._sbSaveBarObs) window._sbSaveBarObs.disconnect();
+window._sbSaveBarObs = new MutationObserver(updateSaveBar);
 var sidebarEl = document.getElementById('sidebar');
-if (sidebarEl) obs.observe(sidebarEl, { attributes:true, attributeFilter:['class'] });
+if (sidebarEl) window._sbSaveBarObs.observe(sidebarEl, { attributes:true, attributeFilter:['class'] });
 updateSaveBar();
 
 // ── Change detection ─────────────────────────────────────────────────────────
@@ -591,7 +598,7 @@ function checkDirty() {
   var dirty = ids.some(id => {
     var el = document.getElementById(id);
     return el && el.value !== _originalValues[id];
-  });
+  }) || !!_pendingTheme;   // an unsaved theme choice keeps the save bar visible
   if (dirty !== _isDirty) {
     _isDirty = dirty;
     var bar = document.getElementById('saveBar');
@@ -665,27 +672,9 @@ var _realValues = {};
 var _revealLoaded = false;
 
 async function handleRevealToggle(checked) {
-  var label  = document.getElementById('revealLabel');
-  var hint   = document.getElementById('revealHint');
-  var status = document.getElementById('revealStatus');
-  _isDirty = true;
-  var bar = document.getElementById('saveBar');
-  if (bar) bar.style.display = 'flex';
-  if (checked) {
-    label.textContent       = 'Show sensitive values';
-    hint.textContent        = 'Save settings to activate';
-    status.style.display    = 'block';
-    status.style.background = 'rgba(240,151,30,0.15)';
-    status.style.color      = '#f0971e';
-    status.textContent      = '⚠ Save settings to activate';
-  } else {
-    label.textContent       = 'Show sensitive values';
-    hint.textContent        = 'Save settings to apply';
-    status.style.display    = 'block';
-    status.style.background = 'rgba(240,151,30,0.15)';
-    status.style.color      = '#f0971e';
-    status.textContent      = '⚠ Save settings to apply';
-  }
+  // Revealing is a read-only operation — apply it directly instead of
+  // forcing a full settings save first.
+  await applyRevealAfterSave(checked);
 }
 
 

@@ -372,9 +372,11 @@ window.showToast = function(msg, type='info', title='') {
   };
   const t = document.createElement('div');
   t.className = `toast t-${type}`;
+  // msg/title often contain scraped movie titles — never render them raw
+  const _e = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   t.innerHTML = `
     <div class="toast-thumb-ph">🎬</div>
-    <div class="toast-body">${title ? `<div class="toast-title">${title}</div>` : ''}<div class="toast-msg">${msg}</div></div>
+    <div class="toast-body">${title ? `<div class="toast-title">${_e(title)}</div>` : ''}<div class="toast-msg">${_e(msg)}</div></div>
     <div class="toast-icon">${icons[type]||icons.info}</div>
     <button class="toast-close" onclick="this.closest('.toast').remove()">✕</button>`;
   document.getElementById('toast-container').appendChild(t);
@@ -392,7 +394,13 @@ window.getTmdbKey = async function() {
 
 // ── Escape html ───────────────────────────────────────────────────────────────
 window.esc = function(s) {
-  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+};
+// Escape for embedding inside a single-quoted JS string in an inline handler.
+// Use as esc(escJs(s)) — HTML entities in attributes are decoded before the JS
+// engine parses them, so entity-escaping alone does not protect JS strings.
+window.escJs = function(s) {
+  return String(s ?? '').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"');
 };
 
 // ── Status & session banner ───────────────────────────────────────────────────
@@ -435,6 +443,9 @@ window.updateSidebarDl = function(downloads) {
     document.getElementById('sbDlSize').textContent  = `${dl.size_mb||0} / ${dl.total_mb||0} MB · ${dl.progress||0}%`;
     document.getElementById('sbDlFill').style.width  = `${dl.progress||0}%`;
     const pb = document.getElementById('sbDlPause');
+    // Pause is only valid mid-transfer; resume only when paused — the backend
+    // rejects both for queued/pausing items, so don't offer a dead button.
+    pb.style.display = (dl.status === 'downloading' || dl.status === 'paused') ? '' : 'none';
     pb.innerHTML = dl.status === 'paused'
       ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5,3 19,12 5,21 5,3"/></svg>'
       : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
@@ -454,7 +465,6 @@ window.updateSidebarDl = function(downloads) {
 // ── Page loader ───────────────────────────────────────────────────────────────
 let currentPage = null;
 let prevPage    = null;
-let dlPollInterval = null;
 
 async function loadPage(name) {
   if (currentPage === name) return;
@@ -467,9 +477,6 @@ async function loadPage(name) {
   }
   window._justSaved = false;
   currentPage = name;
-
-  // Clear any previous polling
-  if (dlPollInterval) { clearInterval(dlPollInterval); dlPollInterval = null; }
 
   // Update nav
   document.querySelectorAll('.nav-item').forEach(n => {

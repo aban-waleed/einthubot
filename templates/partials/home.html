@@ -94,18 +94,20 @@ window.init_home = async function() {
     window.setLibBadge(libArr.length + showArr.length);
     window.updateSidebarDl(dlArr);
 
-    // Pending requests
+    // Pending requests — kept in an array so click handlers can look the
+    // request up by index instead of inlining titles into JS strings.
     var pending = reqArr.filter(r=>r.status==='pending');
+    window._homePending = pending.slice(0,4);
     var hp = document.getElementById('homePending');
     if (!pending.length) {
       hp.innerHTML = `<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-label">No pending requests</div></div>`;
     } else {
-      hp.innerHTML = pending.slice(0,4).map(req=>`
+      hp.innerHTML = window._homePending.map((req,i)=>`
         <div class="req-card">
           <div class="req-poster-strip">${req.poster?`<img src="${esc(req.poster)}" alt="" onerror="this.style.display='none'">`:'🎬'}</div>
           <div class="req-body">
             <div class="req-title">${esc(req.title)} <span style="color:var(--muted);font-weight:400;">(${esc(req.year)})</span></div>
-            <button class="btn-approve" onclick="homeApprove(${req.id},'${esc(req.title)}','${esc(req.year)}','${esc(req.original_title||'')}',this)">▶ Download</button>
+            <button class="btn-approve" onclick="homeApprove(${i},this)">▶ Download</button>
           </div>
         </div>`).join('');
     }
@@ -128,11 +130,13 @@ window.init_home = async function() {
   } catch(e) { console.error(e); }
 };
 
-async function homeApprove(reqId, title, year, orig, btn) {
+async function homeApprove(i, btn) {
+  var req = (window._homePending||[])[i];
+  if (!req) return;
   btn.disabled = true; btn.textContent = '⏳…';
   try {
-    var d = await fetch('/api/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:reqId,title,year,original_title:orig})}).then(r=>r.json());
-    if (d.ok) { showToast(`Searching for "${title}"…`,'info','Approved'); btn.textContent='⬇ Queued'; btn.style.opacity='0.5'; }
+    var d = await fetch('/api/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:req.id,title:req.title,year:req.year,original_title:req.original_title||''})}).then(r=>r.json());
+    if (d.ok) { showToast(`Searching for "${req.title}"…`,'info','Approved'); btn.textContent='⬇ Queued'; btn.style.opacity='0.5'; }
     else { showToast(d.error||'Failed','error'); btn.disabled=false; btn.textContent='▶ Download'; }
   } catch(e) { showToast('Failed','error'); btn.disabled=false; btn.textContent='▶ Download'; }
 }
