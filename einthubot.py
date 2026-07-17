@@ -392,6 +392,21 @@ class EinthusanClient:
             log.error("Search error for '%s': %s", title, e)
             return []
 
+    def _player_mp4_link(self, page_url: str, referer: str):
+        """Fetch a premium player page and return (data-mp4-link, page_html)."""
+        self.session.headers.update({"Referer": referer})
+        r = self.session.get(page_url, timeout=15)
+        if r.status_code != 200 or "UIVideoPlayer" not in r.text:
+            log.warning("Player page %s: status=%s player_present=%s",
+                        page_url, r.status_code, "UIVideoPlayer" in r.text)
+            return None, r.text
+        tag = BeautifulSoup(r.text, "html.parser").find(attrs={"data-mp4-link": True})
+        return (tag["data-mp4-link"] if tag else None), r.text
+
+    @staticmethod
+    def _mp4_name(url: str) -> str:
+        return url.split("?")[0].rsplit("/", 1)[-1]
+
     def get_download_url(self, movie_url: str, prefer_uhd: bool = True) -> Optional[str]:
         try:
             self.session.headers.update({"Referer": Config.EINTHUSAN_BASE, "Content-Type": "text/html"})
@@ -415,21 +430,31 @@ class EinthusanClient:
                 try:
                     uhd_url = f"{Config.EINTHUSAN_BASE}/premium/movie/watch/{movie_id}/?lang={lang}&uhd=true"
                     log.info("UHD path: fetching %s", uhd_url)
-                    self.session.headers.update({"Referer": movie_url})
-                    r_uhd = self.session.get(uhd_url, timeout=15)
-                    if r_uhd.status_code == 200 and "UIVideoPlayer" in r_uhd.text:
-                        soup_uhd = BeautifulSoup(r_uhd.text, "html.parser")
-                        mp4_tag = soup_uhd.find(attrs={"data-mp4-link": True})
-                        if mp4_tag:
-                            log.info("UHD path: raw data-mp4-link = %s", mp4_tag["data-mp4-link"])
-                            final = self._resolve_cdn_url(mp4_tag["data-mp4-link"],
-                                                          page_html=r_uhd.text, referer=uhd_url)
+                    uhd_link, uhd_html = self._player_mp4_link(uhd_url, movie_url)
+                    if uhd_link:
+                        log.info("UHD path: raw data-mp4-link = %s", uhd_link)
+                        # Stale sessions get silently downgraded: the uhd=true page starts
+                        # returning the same file the plain HD page serves. Compare the two
+                        # and re-login once to restore the real UHD source.
+                        hd_check_url = f"{Config.EINTHUSAN_BASE}/premium/movie/watch/{movie_id}/?lang={lang}"
+                        hd_link, _ = self._player_mp4_link(hd_check_url, movie_url)
+                        if hd_link and self._mp4_name(uhd_link) == self._mp4_name(hd_link):
+                            log.warning("UHD path: uhd=true page served the HD file (%s) - "
+                                        "stale session, re-logging in and retrying",
+                                        self._mp4_name(uhd_link))
+                            if self.login():
+                                uhd_link, uhd_html = self._player_mp4_link(uhd_url, movie_url)
+                                if uhd_link:
+                                    log.info("UHD path: after re-login data-mp4-link = %s", uhd_link)
+                            if not uhd_link or self._mp4_name(uhd_link) == self._mp4_name(hd_link):
+                                log.warning("UHD path: still no distinct UHD file after re-login - using HD")
+                                uhd_link = None
+                        if uhd_link:
+                            final = self._resolve_cdn_url(uhd_link, page_html=uhd_html, referer=uhd_url)
                             log.info("UHD path: final download URL = %s (is_uhd=True)", final)
                             return final, True
-                        log.warning("UHD path: player page has no data-mp4-link - falling back to HD")
                     else:
-                        log.warning("UHD path: page status=%s player_present=%s - falling back to HD",
-                                    r_uhd.status_code, "UIVideoPlayer" in r_uhd.text)
+                        log.warning("UHD path: no data-mp4-link on uhd page - falling back to HD")
                 except Exception as ue:
                     log.warning("UHD fetch failed, falling back to HD: %s", ue)
             elif prefer_uhd:
