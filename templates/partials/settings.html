@@ -79,6 +79,19 @@
 
   .spin { display:inline-block; width:13px; height:13px; border:2px solid var(--border2); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; vertical-align:middle; margin-right:4px; }
   @keyframes spin { to { transform:rotate(360deg); } }
+  @media (max-width:768px) {
+    .page-inner { padding:16px 14px 130px; }
+    .settings-header { padding:14px; flex-wrap:wrap; }
+    .conn-badge { white-space:normal; }
+    .btn-sm { padding:9px 14px; }
+    .setting-row { flex-direction:column; align-items:stretch; gap:10px; padding:12px 14px; }
+    .setting-input, select.setting-input { min-width:0; width:100%; }
+    .btn-row { flex-wrap:wrap; }
+    .eye-btn { padding:10px; right:0; }
+    .theme-grid { grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); padding:0 14px 16px; }
+    .reveal-bar { padding:12px 14px; }
+    .save-bar { left:60px; padding:12px 14px; flex-wrap:wrap; gap:8px; }
+  }
 </style>
 
 <div class="reveal-bar">
@@ -178,7 +191,7 @@
     <div class="settings-body">
       <div class="setting-row">
         <div class="setting-left"><div class="setting-label">Download directory</div><div class="setting-hint">Absolute path on the server where MP4 files are saved</div></div>
-        <input class="setting-input" id="setDownloadDir" type="text" placeholder="/home/user/media/movies" style="min-width:300px;" />
+        <input class="setting-input" id="setDownloadDir" type="text" placeholder="/home/user/media/movies" style="min-width:min(300px,100%);" />
       </div>
       <div class="setting-row">
         <div class="setting-left"><div class="setting-label">Jellyseerr poll interval</div><div class="setting-hint">How often to check for new requests (seconds, min 30)</div></div>

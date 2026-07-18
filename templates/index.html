@@ -140,6 +140,23 @@
     body.theme-light .btn-watch-card { color:#15803d; border-color:rgba(21,128,61,0.4); background:rgba(21,128,61,0.08); }
     body.theme-light .btn-resume { color:#15803d; border-color:#15803d; background:rgba(21,128,61,0.1); }
     body.theme-light .btn-success { color:#15803d; border-color:#15803d; }
+
+    /* ── Mobile (≤768px): sidebar becomes a fixed icon rail ── */
+    @media (max-width:768px) {
+      #sidebar { width:60px; min-width:60px; }
+      .sb-logo { padding:14px 12px 12px; justify-content:center; }
+      .sb-logo-text { display:none; }
+      .sb-section { opacity:0; height:4px; margin:4px 0 0; pointer-events:none; }
+      .nav-item { justify-content:center; padding:11px 10px; }
+      .nav-label { max-width:0; opacity:0; }
+      .nav-badge { position:absolute; top:3px; right:3px; margin:0; padding:1px 5px; font-size:9px; max-width:none; }
+      .sb-dl { display:none; }
+      .sb-toggle { display:none; }
+      #toast-container { left:12px; right:12px; bottom:12px; }
+      .toast { min-width:0; max-width:none; width:100%; }
+      .match-wrap { padding:16px; max-height:88vh; }
+      .match-actions button { padding:11px 16px; }
+    }
   </style>
 </head>
 <body>

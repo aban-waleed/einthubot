@@ -34,6 +34,13 @@
   .empty-label{font-size:13px;}
   .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:5px;}
   @keyframes spin{to{transform:rotate(360deg);}}
+  @media (max-width:768px) {
+    .page-inner { padding:16px 14px; }
+    .page-header { flex-wrap:wrap; gap:10px; }
+    .filter-btn { padding:8px 14px; }
+    .btn-sm { padding:9px 14px; }
+    .btn-approve { padding:9px 16px; }
+  }
 </style>
 
 <div class="page-inner">

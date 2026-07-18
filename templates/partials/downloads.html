@@ -38,6 +38,17 @@
   .btn-outline{background:transparent;border:0.5px solid var(--border2);color:var(--muted);}
   .btn-sm{padding:5px 12px;font-size:12px;}
   .btn-danger{background:var(--error);color:#fff;}
+  @media (max-width:768px) {
+    .page-inner { padding:16px 14px; }
+    .dl-card { padding:14px; }
+    .dl-header { flex-wrap:wrap; }
+    .dl-actions { flex-shrink:1; width:100%; }
+    .btn-ghost, .btn-pause, .btn-resume, .btn-cancel { padding:8px 12px; }
+    .modal-overlay { padding:16px; }
+    .confirm-wrap { width:100%; max-width:400px; }
+    .confirm-actions { flex-wrap:wrap; }
+    .btn-sm { padding:8px 12px; }
+  }
 </style>
 
 <div class="page-inner">

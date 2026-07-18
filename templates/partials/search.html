@@ -32,6 +32,13 @@
   .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:5px;}
   @keyframes spin{to{transform:rotate(360deg);}}
   .btn-sm{padding:5px 12px;font-size:12px;}
+  @media (max-width:768px) {
+    .page-inner { padding:16px 14px; }
+    .search-row { flex-wrap:wrap; padding:12px; }
+    .search-row input { min-width:100%; }
+    .result-item { padding:12px; gap:10px; }
+    .btn-sm { padding:8px 14px; }
+  }
 </style>
 
 <div class="page-inner">

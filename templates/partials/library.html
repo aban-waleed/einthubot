@@ -100,6 +100,22 @@
   .empty-label { font-size:13px; }
   .spin { display:inline-block; width:14px; height:14px; border:2px solid var(--border2); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; vertical-align:middle; margin-right:5px; }
   @keyframes spin { to { transform:rotate(360deg); } }
+  @media (max-width:768px) {
+    .page-inner { padding:16px 14px; }
+    .lib-toolbar { gap:8px; }
+    .lib-toolbar input { min-width:130px; }
+    .type-btn { padding:9px 16px; }
+    .btn-sm { padding:9px 14px; }
+    .lib-grid { grid-template-columns:repeat(auto-fill,minmax(105px,1fr)); gap:10px; }
+    .btn-watch-card, .btn-del-card { padding:9px 5px; font-size:11px; }
+    .modal-body { padding:0 16px 16px; }
+    .modal-header { gap:12px; }
+    .episode-item { flex-wrap:wrap; padding:10px 12px; }
+    .ep-actions { width:100%; justify-content:flex-end; }
+    .ep-watch-btn, .ep-del-btn { padding:8px 14px; }
+    .season-del-btn { padding:8px 12px; }
+    .confirm-wrap { width:100%; max-width:400px; }
+  }
 </style>
 
 <div class="page-inner">
