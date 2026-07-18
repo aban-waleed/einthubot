@@ -21,7 +21,7 @@
     .sb-logo { display:flex; align-items:center; gap:10px; padding:18px 14px 14px; border-bottom:0.5px solid var(--border); flex-shrink:0; overflow:hidden; }
     .sb-logo-icon { width:34px; height:34px; border-radius:9px; background:var(--accent); display:grid; place-items:center; font-size:18px; flex-shrink:0; }
     .sb-logo-text { overflow:hidden; white-space:nowrap; }
-    .sb-logo-name { font-size:14px; font-weight:600; color:#fff; }
+    .sb-logo-name { font-size:14px; font-weight:600; color:var(--text,#fff); }
     .sb-logo-status { font-size:10px; color:var(--success); margin-top:2px; }
     .sb-logo-status.offline { color:var(--error); }
     #sidebar.collapsed .sb-logo-text { display:none; }
@@ -42,7 +42,7 @@
     .nav-label { font-size:13px; color:var(--muted); white-space:nowrap; overflow:hidden; transition:color 0.15s,max-width 0.25s,opacity 0.2s; max-width:160px; }
     .nav-item.active .nav-label { color:var(--accent); font-weight:500; }
     #sidebar.collapsed .nav-label { max-width:0; opacity:0; }
-    .nav-badge { margin-left:auto; background:var(--accent); color:#000; font-size:10px; font-weight:700; padding:2px 7px; border-radius:10px; flex-shrink:0; transition:opacity 0.2s,max-width 0.25s; max-width:40px; overflow:hidden; }
+    .nav-badge { margin-left:auto; background:var(--accent); color:var(--accent-fg,#000); font-size:10px; font-weight:700; padding:2px 7px; border-radius:10px; flex-shrink:0; transition:opacity 0.2s,max-width 0.25s; max-width:40px; overflow:hidden; }
     #sidebar.collapsed .nav-badge { opacity:0; max-width:0; padding:0; }
 
     /* Active download mini-card */
@@ -126,8 +126,20 @@
     .match-actions button { padding:6px 14px; border-radius:8px; border:none; font-size:12px; font-weight:600; cursor:pointer; transition:opacity 0.15s; font-family:inherit; }
     .match-actions button:hover { opacity:0.85; }
     .match-btn-cancel { background:transparent; border:0.5px solid var(--border2) !important; color:var(--muted); }
-    .match-btn-confirm { background:var(--accent-btn-bg,var(--accent)); color:#000; font-weight:700; }
+    .match-btn-confirm { background:var(--accent-btn-bg,var(--accent)); color:var(--accent-fg,#000); font-weight:700; }
     .match-btn-confirm:disabled { opacity:0.4; cursor:not-allowed; }
+
+    /* ── Light-theme readability overrides ──
+       Partial styles hardcode bright greens/blues/purples that assume a dark
+       background; body.theme-light out-specifies them with darker variants. */
+    body.theme-light .conn-ok { background:rgba(21,128,61,0.1); color:#15803d; }
+    body.theme-light .rs-partial { background:rgba(194,87,10,0.1); color:#c2570a; border-color:rgba(194,87,10,0.4); }
+    body.theme-light .uhd-chip, body.theme-light .tag-uhd, body.theme-light .mt-uhd { background:rgba(124,58,237,0.1); color:#7c3aed; border-color:rgba(124,58,237,0.4); }
+    body.theme-light .tag-hd, body.theme-light .mt-hd { background:rgba(37,99,235,0.1); color:#2563eb; }
+    body.theme-light .media-rating { color:#f0971e; }  /* amber pops on the dark poster overlay */
+    body.theme-light .btn-watch-card { color:#15803d; border-color:rgba(21,128,61,0.4); background:rgba(21,128,61,0.08); }
+    body.theme-light .btn-resume { color:#15803d; border-color:#15803d; background:rgba(21,128,61,0.1); }
+    body.theme-light .btn-success { color:#15803d; border-color:#15803d; }
   </style>
 </head>
 <body>
@@ -293,6 +305,13 @@ window.applyTheme = function(name) {
     r.setProperty('--muted', '#5a5a7a');
     r.setProperty('--muted2','#3d3d5c');
   }
+  // Text on accent-colored surfaces: light theme's accent is near-black navy,
+  // so the usual black button text becomes unreadable — flip to white there.
+  // Status greens/blues also need darker variants on a light background.
+  r.setProperty('--accent-fg', t.light ? '#fff' : '#000');
+  r.setProperty('--success',   t.light ? '#15803d' : '#3bd47a');
+  r.setProperty('--info',      t.light ? '#2563eb' : '#5b8dee');
+  document.body.classList.toggle('theme-light', !!t.light);
   localStorage.setItem('einthubot_theme', name);
   window._currentTheme = name;
   document.body.style.background = t.bg;
@@ -339,6 +358,10 @@ window.applyThemePreview = function(name) {
     r.setProperty('--muted', '#5a5a7a');
     r.setProperty('--muted2','#3d3d5c');
   }
+  r.setProperty('--accent-fg', t.light ? '#fff' : '#000');
+  r.setProperty('--success',   t.light ? '#15803d' : '#3bd47a');
+  r.setProperty('--info',      t.light ? '#2563eb' : '#5b8dee');
+  document.body.classList.toggle('theme-light', !!t.light);
   // Note: does NOT save to localStorage or update _currentTheme
   document.body.style.background = t.bg;
   document.body.style.color = t.light ? '#1a1a2e' : '#e8e6f0';
@@ -386,6 +409,10 @@ window._pendingInitTheme = localStorage.getItem('einthubot_theme') || 'amber';
     r.setProperty('--muted', '#5a5a7a');
     r.setProperty('--muted2','#3d3d5c');
   }
+  r.setProperty('--accent-fg', t.light ? '#fff' : '#000');
+  r.setProperty('--success',   t.light ? '#15803d' : '#3bd47a');
+  r.setProperty('--info',      t.light ? '#2563eb' : '#5b8dee');
+  document.body.classList.toggle('theme-light', !!t.light);
   document.body.style.background = t.bg;
   window._currentTheme = saved;
 })();
