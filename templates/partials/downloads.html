@@ -74,9 +74,9 @@ function fmtEta(sec){
   return sec+' sec left';
 }
 
-function dsc(s){return({downloading:'ds-downloading',completed:'ds-completed',error:'ds-error',queued:'ds-queued',paused:'ds-paused',pausing:'ds-pausing'})[s]||'ds-queued';}
-function dsl(s){return({downloading:'Downloading',completed:'Completed',error:'Error',queued:'Queued',paused:'Paused',pausing:'Pausing…'})[s]||s;}
-function barCls(s){return s==='error'?'errored':s==='paused'||s==='pausing'?'paused':'';}
+function dsc(s){return({downloading:'ds-downloading',completed:'ds-completed',error:'ds-error',queued:'ds-queued',paused:'ds-paused',pausing:'ds-pausing',retrying:'ds-queued'})[s]||'ds-queued';}
+function dsl(s){return({downloading:'Downloading',completed:'Completed',error:'Error',queued:'Queued',paused:'Paused',pausing:'Pausing…',retrying:'Retrying…'})[s]||s;}
+function barCls(s){return s==='error'?'errored':s==='paused'||s==='pausing'||s==='retrying'?'paused':'';}
 
 function renderDl(dl) {
   var p=dl.progress||0, id=esc(dl.id), t=esc(dl.title);
@@ -89,6 +89,7 @@ function renderDl(dl) {
   var acts='';
   if(isDown) acts=`<button class="btn-pause" onclick="dlPause('${id}')">⏸ Pause</button><button class="btn-cancel" onclick="dlCancel('${id}')">✕ Cancel</button>`;
   if(isPaused) acts=`<button class="btn-resume" onclick="dlResume('${id}')">▶ Resume</button><button class="btn-cancel" onclick="dlCancel('${id}')">✕ Cancel</button>`;
+  if(dl.status==='retrying') acts=`<button class="btn-cancel" onclick="dlCancel('${id}')">✕ Cancel</button>`;
   if(dl.status==='error') acts=`<button class="btn-resume" onclick="dlRetry('${id}')">↻ Retry</button>`;
   var showRm=['completed','error'].includes(dl.status);
   return `<div class="dl-card">
@@ -105,7 +106,7 @@ async function refreshDls(data) {
   if (!data) data = await fetch('/api/downloads').then(r=>r.json());
   _dlById = {};
   data.forEach(d => { _dlById[d.id] = d; });
-  var active  = data.filter(d=>['downloading','queued','paused','pausing'].includes(d.status));
+  var active  = data.filter(d=>['downloading','queued','paused','pausing','retrying'].includes(d.status));
   var history = data.filter(d=>['completed','error'].includes(d.status)).reverse();
   var ae = document.getElementById('activeDls');
   var he = document.getElementById('dlHistory');

@@ -101,6 +101,33 @@
     ::-webkit-scrollbar { width:5px; }
     ::-webkit-scrollbar-track { background:transparent; }
     ::-webkit-scrollbar-thumb { background:var(--border2); border-radius:3px; }
+
+    /* ── Match-confirmation modal (shared by Home + Requests tabs) ── */
+    #matchModal { position:fixed; inset:0; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; z-index:300; opacity:0; pointer-events:none; transition:opacity 0.2s; }
+    #matchModal.show { opacity:1; pointer-events:all; }
+    .match-wrap { background:var(--surface); border:0.5px solid var(--border2); border-radius:14px; padding:22px; width:520px; max-width:92vw; max-height:80vh; display:flex; flex-direction:column; }
+    .match-wrap h3 { font-size:15px; font-weight:600; margin-bottom:4px; }
+    .match-sub { font-size:12px; color:var(--muted); margin-bottom:14px; }
+    .match-warn { font-size:12px; color:#fb923c; background:rgba(251,146,60,0.1); border:0.5px solid rgba(251,146,60,0.3); border-radius:7px; padding:8px 12px; margin-bottom:12px; }
+    .match-list { overflow-y:auto; flex:1; min-height:0; display:flex; flex-direction:column; gap:6px; margin-bottom:16px; }
+    .match-item { display:flex; align-items:center; gap:12px; padding:9px 11px; border:1.5px solid var(--border2); border-radius:10px; cursor:pointer; transition:border-color 0.15s,background 0.15s; }
+    .match-item:hover { background:var(--surface2); }
+    .match-item.selected { border-color:var(--accent); background:var(--theme-tint,rgba(240,151,30,0.1)); }
+    .match-thumb { width:40px; height:56px; border-radius:6px; object-fit:cover; background:var(--border2); flex-shrink:0; }
+    .match-thumb-ph { width:40px; height:56px; border-radius:6px; background:var(--border2); display:grid; place-items:center; font-size:16px; flex-shrink:0; }
+    .match-info { flex:1; min-width:0; }
+    .match-title { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .match-meta { font-size:11px; color:var(--muted); margin-top:2px; display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+    .match-tag { display:inline-block; padding:1px 6px; border-radius:4px; font-size:10px; font-weight:700; }
+    .mt-best { background:rgba(59,212,122,0.15); color:var(--success); }
+    .mt-uhd { background:rgba(139,92,246,0.2); color:#a78bfa; }
+    .mt-hd { background:rgba(59,130,246,0.15); color:#60a5fa; }
+    .match-actions { display:flex; gap:8px; justify-content:flex-end; flex-shrink:0; }
+    .match-actions button { padding:6px 14px; border-radius:8px; border:none; font-size:12px; font-weight:600; cursor:pointer; transition:opacity 0.15s; font-family:inherit; }
+    .match-actions button:hover { opacity:0.85; }
+    .match-btn-cancel { background:transparent; border:0.5px solid var(--border2) !important; color:var(--muted); }
+    .match-btn-confirm { background:var(--accent-btn-bg,var(--accent)); color:#000; font-weight:700; }
+    .match-btn-confirm:disabled { opacity:0.4; cursor:not-allowed; }
   </style>
 </head>
 <body>
@@ -198,6 +225,20 @@
 </div>
 
 <div id="toast-container"></div>
+
+<!-- Match-confirmation modal (shared by Home + Requests tabs) -->
+<div id="matchModal">
+  <div class="match-wrap">
+    <h3 id="matchHeading">Confirm match</h3>
+    <div class="match-sub" id="matchSub"></div>
+    <div class="match-warn" id="matchWarn" style="display:none;">⚠ No confident match was found — pick the right movie manually, or cancel.</div>
+    <div class="match-list" id="matchList"></div>
+    <div class="match-actions">
+      <button class="match-btn-cancel" onclick="closeMatchModal()">Cancel</button>
+      <button class="match-btn-confirm" id="matchConfirmBtn" onclick="confirmMatch()" disabled>⬇ Download selected</button>
+    </div>
+  </div>
+</div>
 
 <script>
 // ── Theme system ─────────────────────────────────────────────────────────────
@@ -427,9 +468,87 @@ async function retryLogin() {
   setTimeout(loadStatus, 1500);
 }
 
+// ── Match-confirmation flow (shared by Home + Requests tabs) ──────────────────
+let _matchReq = null, _matchCandidates = [], _matchSelected = -1, _matchInitial = -1, _matchOnDone = null;
+
+window.startMatchFlow = async function(req, btn, onDone) {
+  const orig = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ Searching…';
+  try {
+    const d = await fetch('/api/approve/preview', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({request_id:req.id, title:req.title, year:req.year, original_title:req.original_title||''})}).then(r=>r.json());
+    if (d.ok && (d.candidates||[]).length) {
+      openMatchModal(req, d.candidates, d.match_url, onDone);
+    } else {
+      showToast(d.error||'Not found on Einthusan','error');
+    }
+  } catch(e) { showToast('Search failed','error'); }
+  finally { btn.disabled = false; btn.textContent = orig; }
+};
+
+function openMatchModal(req, candidates, matchUrl, onDone) {
+  _matchReq        = req;
+  _matchCandidates = candidates;
+  _matchSelected   = candidates.findIndex(c=>c.url===matchUrl);
+  _matchInitial    = _matchSelected;
+  _matchOnDone     = onDone || null;
+  document.getElementById('matchHeading').textContent = `Confirm match for "${req.title}"`;
+  document.getElementById('matchSub').textContent =
+    `Requested: ${req.title} (${req.year||'?'}) — pick the Einthusan result to download`;
+  document.getElementById('matchWarn').style.display = _matchSelected < 0 ? 'block' : 'none';
+  renderMatchList();
+  document.getElementById('matchModal').classList.add('show');
+}
+
+function renderMatchList() {
+  document.getElementById('matchList').innerHTML = _matchCandidates.map((c,i)=>`
+    <div class="match-item ${i===_matchSelected?'selected':''}" onclick="selectMatch(${i})">
+      ${c.thumb?`<img class="match-thumb" src="${esc(c.thumb)}" alt="" loading="lazy" onerror="this.style.display='none'">`:`<div class="match-thumb-ph">🎬</div>`}
+      <div class="match-info">
+        <div class="match-title">${esc(c.title)}</div>
+        <div class="match-meta">
+          <span>${esc(c.year||'?')}</span> · <span>${esc(c.language||'')}</span>
+          ${c.uhd?`<span class="match-tag mt-uhd">⬆ UHD</span>`:c.hd?`<span class="match-tag mt-hd">HD</span>`:''}
+          ${i===_matchInitial?`<span class="match-tag mt-best">Best match</span>`:''}
+        </div>
+      </div>
+    </div>`).join('');
+  document.getElementById('matchConfirmBtn').disabled = _matchSelected < 0;
+}
+
+window.selectMatch = function(i) { _matchSelected = i; renderMatchList(); };
+
+window.closeMatchModal = function() {
+  document.getElementById('matchModal').classList.remove('show');
+  _matchReq = null; _matchCandidates = []; _matchSelected = -1; _matchInitial = -1; _matchOnDone = null;
+};
+
+window.confirmMatch = async function() {
+  if (!_matchReq || _matchSelected < 0) return;
+  const req = _matchReq, chosen = _matchCandidates[_matchSelected], onDone = _matchOnDone;
+  const btn = document.getElementById('matchConfirmBtn');
+  btn.disabled = true; btn.textContent = '⏳ Starting…';
+  try {
+    const d = await fetch('/api/approve/confirm', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({request_id:req.id, tmdb_id:req.tmdb_id, title:req.title, year:req.year, url:chosen.url})}).then(r=>r.json());
+    if (d.ok) {
+      showToast(`Downloading "${chosen.title}" (${chosen.year||'?'})`,'success','Match confirmed');
+      closeMatchModal();
+      if (onDone) onDone();
+    } else {
+      showToast(d.error||'Failed to start download','error');
+    }
+  } catch(e) { showToast('Failed to start download','error'); }
+  finally { btn.disabled = false; btn.textContent = '⬇ Download selected'; }
+};
+
+document.getElementById('matchModal').addEventListener('click', function(e){
+  if (e.target === this) closeMatchModal();
+});
+
 // ── Sidebar download mini-card (global) ───────────────────────────────────────
 window.updateSidebarDl = function(downloads) {
-  const active = downloads.filter(d => ['downloading','queued','paused','pausing'].includes(d.status));
+  const active = downloads.filter(d => ['downloading','queued','paused','pausing','retrying'].includes(d.status));
   const dl = active.find(d => d.status === 'downloading') || active[0];
   const sbDl = document.getElementById('sbDl');
   const dlBadge = document.getElementById('dlBadge');
@@ -441,7 +560,7 @@ window.updateSidebarDl = function(downloads) {
     sbDl.style.display = 'block';
     document.getElementById('sbDlTitle').textContent = dl.title || '';
     let eta = '';
-    if (dl.status === 'downloading' && dl.eta_seconds != null && isFinite(dl.eta_seconds)) {
+    if (dl.status === 'downloading' && dl.eta_seconds != null && isFinite(dl.eta_seconds) && dl.eta_seconds >= 0) {
       const s = Math.round(dl.eta_seconds);
       eta = ' · ' + (s >= 3600 ? Math.floor(s/3600)+'h '+Math.round((s%3600)/60)+'m left'
                   : s >= 60   ? Math.floor(s/60)+'m '+(s%60)+'s left'

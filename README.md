@@ -24,7 +24,7 @@ A self-hosted tool that integrates [Einthusan.tv](https://einthusan.tv) Premium 
 - 🔒 **File permissions** — downloaded files are automatically set to `777` so Jellyfin can delete them
 - 🌐 **CDN failover** — decodes the player page's CDN host list and probes `cdn1/2/3.einthusan.io` to find the host that actually serves the file
 - 💾 **Persistent state** — download history and request tracking survive container restarts (`data/state.json`); interrupted downloads can be resumed with one click
-- ↻ **Retry & auto-scan** — failed downloads get a Retry button (resumes from the partial file), and Jellyfin library scans trigger automatically after each completed download
+- ↻ **Auto-retry & auto-scan** — transient download failures retry automatically with backoff (30s/2m/5m), resuming from the partial file only when it's verifiably the same source file; failed downloads also get a manual Retry button, and Jellyfin library scans trigger automatically after each completed download
 - 🐳 **Docker** — runs as a single container alongside your existing media stack
 
 ---
@@ -404,7 +404,7 @@ Make sure `JELLYFIN_API_KEY` and `JELLYFIN_URL` are set in both `.env` and `dock
 
 ## Stack
 
-- **Python 3.12** + Flask + BeautifulSoup4
+- **Python 3.12** + Flask (served by Waitress) + BeautifulSoup4
 - **TMDB API v3** for metadata, posters and cast
 - **Jellyfin API** for library management
 - **Jellyseerr API** for request management

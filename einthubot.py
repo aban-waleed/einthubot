@@ -69,6 +69,18 @@ STATE_DIR  = Path(os.getenv("STATE_DIR", "data"))
 STATE_FILE = STATE_DIR / "state.json"
 _state_lock = threading.Lock()
 
+def snapshot_downloads() -> list[dict]:
+    """Copy download records safely. Download threads add keys to records
+    mid-flight, which can raise RuntimeError during a naive copy — retry a
+    few times rather than 500 on an unlucky poll."""
+    for _ in range(3):
+        try:
+            return [dict(v) for v in list(downloads.values())]
+        except RuntimeError:
+            time.sleep(0.01)
+    return []
+
+
 def save_state():
     """Snapshot download history and request tracking to disk (atomic write)."""
     try:
@@ -79,7 +91,7 @@ def save_state():
                 "approved_request_ids":  sorted(approved_request_ids),
                 "completed_request_ids": sorted(completed_request_ids),
                 "known_request_ids":     sorted(known_request_ids),
-                "downloads":             {k: dict(v) for k, v in list(downloads.items())},
+                "downloads":             {v["id"]: v for v in snapshot_downloads() if "id" in v},
             }
             tmp = STATE_FILE.with_suffix(".json.tmp")
             tmp.write_text(json.dumps(snap))
@@ -215,7 +227,9 @@ def get_tmdb_info(title: str, year: str) -> dict:
                 elif diff <= 1:
                     score += 15
                 elif diff > 2:
-                    score -= 25
+                    # 3+ years off with both years known is a different movie
+                    # (e.g. "Coolie" must not become "Coolie No. 1" from 1995)
+                    continue
             if score > best_score:
                 best, best_score = c, score
         if not best:
@@ -615,7 +629,10 @@ class EinthusanClient:
         folder, filename = build_movie_filename(title, year, tmdb_id)
         folder.mkdir(parents=True, exist_ok=True)
         set_permissions(str(folder))
-        downloads[dl_id].update({
+        rec = downloads.get(dl_id)
+        if rec is None:
+            return "cancelled"
+        rec.update({
             "status":       "downloading",
             "filename":     str(filename),
             "folder":       str(folder),
@@ -802,8 +819,11 @@ def match_title(request_title: str, request_year: str,
         if year_matches:
             log.info("Found %d year-exact matches for %s", len(year_matches), ry)
             best = max(year_matches, key=title_score)
-            log.info("Year-match winner: '%s' (%s)", best["title"], best.get("year"))
-            return best
+            if title_score(best) >= 40:
+                log.info("Year-match winner: '%s' (%s)", best["title"], best.get("year"))
+                return best
+            # Same year but unrelated title is still a different movie
+            log.warning("Year-exact candidate '%s' has unrelated title — rejecting", best["title"])
 
         close_matches = [r for r in results
                          if r.get("year","").strip().isdigit() and ry.isdigit()
@@ -836,6 +856,33 @@ seerr     = SeerrClient()
 jellyfin  = JellyfinClient()
 
 
+AUTO_RETRY_DELAYS = [30, 120, 300]
+
+
+def refresh_download_url(rec: dict):
+    """Re-resolve a record's download URL from its movie page.
+
+    Returns (dl_url, is_uhd, same_file). same_file False means the source
+    resolved to a DIFFERENT mp4 than the one the partial file came from —
+    appending to the partial would splice two encodes together, so the
+    caller must restart from byte 0."""
+    old_name  = EinthusanClient._mp4_name(rec.get("download_url", "")) if rec.get("download_url") else ""
+    dl_url    = rec.get("download_url") or None
+    is_uhd    = rec.get("uhd", False)
+    movie_url = rec.get("movie_url", "")
+    if movie_url:
+        res   = einthusan.get_download_url(movie_url)
+        fresh = res[0] if isinstance(res, tuple) else res
+        if isinstance(res, tuple):
+            is_uhd = res[1]
+        if fresh:
+            dl_url = fresh
+    if not dl_url:
+        return None, is_uhd, True
+    same_file = (not old_name) or EinthusanClient._mp4_name(dl_url) == old_name
+    return dl_url, is_uhd, same_file
+
+
 def run_download(dl_id: str, title: str, dl_url: str,
                  year: str = "", tmdb_id: Optional[int] = None,
                  resume_from: int = 0):
@@ -860,8 +907,45 @@ def run_download(dl_id: str, title: str, dl_url: str,
                 cleanup_download(dl_id)
             break
         if result == "error":
-            # Un-track the request so the user can approve/retry it again.
-            rid = downloads.get(dl_id, {}).get("request_id")
+            rec = downloads.get(dl_id)
+            # Transient CDN/network failures self-heal: back off, re-resolve
+            # the URL (tokens expire), and resume from the partial file.
+            retries = rec.get("auto_retries", 0) if rec else len(AUTO_RETRY_DELAYS)
+            if rec is not None and retries < len(AUTO_RETRY_DELAYS) and not cancel_flags.get(dl_id):
+                delay = AUTO_RETRY_DELAYS[retries]
+                rec["auto_retries"] = retries + 1
+                rec["status"] = "retrying"
+                log_activity("download", title,
+                             f"Auto-retry {retries+1}/{len(AUTO_RETRY_DELAYS)} in {delay}s", "info")
+                save_state()
+                waited = 0
+                while waited < delay and not cancel_flags.get(dl_id) and dl_id in downloads:
+                    time.sleep(1)
+                    waited += 1
+                if cancel_flags.get(dl_id) or dl_id not in downloads:
+                    if dl_id in downloads:
+                        cleanup_download(dl_id)
+                    break
+                fresh_url, is_uhd, same_file = refresh_download_url(rec)
+                if fresh_url:
+                    rec["uhd"] = is_uhd
+                    dl_url = fresh_url
+                    fn = rec.get("filename", "")
+                    if same_file and fn and Path(fn).exists():
+                        resume_from = Path(fn).stat().st_size
+                    else:
+                        resume_from = 0
+                        if not same_file:
+                            log_activity("download", title,
+                                         "Source file changed — restarting from 0", "info")
+                    rec["status"] = "queued"
+                    continue
+                rec.update({"status": "error", "error": "Auto-retry failed: no download URL"})
+                log_activity("download", title, "Auto-retry failed: no download URL", "error")
+                save_state()
+            # Exhausted or unrecoverable — un-track the request so the user
+            # can approve/retry it again.
+            rid = rec.get("request_id") if rec else None
             if rid:
                 approved_request_ids.discard(rid)
                 save_state()
@@ -992,9 +1076,12 @@ def process_request(req: dict):
         save_state()
         return
     log_activity("seerr", title, f"New request #{rid} detected", "info")
-    approve_and_download(title, year, original_title=original_title, request_id=rid)
+    # Claim before the (slow) search so a manual approve/confirm from the UI
+    # can't start a second download for the same request mid-search.
+    approved_request_ids.add(rid)
     known_request_ids.add(rid)
     save_state()
+    approve_and_download(title, year, original_title=original_title, request_id=rid)
 
 
 def watcher_loop():
@@ -1065,7 +1152,7 @@ def api_activity():
 
 @app.route("/api/downloads")
 def api_downloads():
-    return jsonify(list(downloads.values()))
+    return jsonify(snapshot_downloads())
 
 @app.route("/api/library")
 def api_library():
@@ -1198,7 +1285,7 @@ def api_requests():
             einthubot_completed = rid in completed_request_ids
             matching_dl         = None
             matching_status     = None
-            for dl in downloads.values():
+            for dl in snapshot_downloads():
                 if dl.get("request_id") == rid:
                     matching_dl     = dl.get("id")
                     matching_status = dl.get("status")
@@ -1361,23 +1448,16 @@ def api_retry(dl_id):
     pause_flags[dl_id]  = False
     dl.pop("error", None)
     dl["status"] = "queued"
+    dl["auto_retries"] = 0
     title = dl.get("title", "")
     def _do():
-        # Prefer re-resolving from the movie page — stored CDN URLs carry
-        # expiring tokens. Fall back to the stored URL for old records.
-        dl_url = dl.get("download_url") or None
-        is_uhd = dl.get("uhd", False)
-        movie_url = dl.get("movie_url", "")
-        if movie_url:
-            res = einthusan.get_download_url(movie_url)
-            fresh = res[0] if isinstance(res, tuple) else res
-            if isinstance(res, tuple):
-                is_uhd = res[1]
-            if fresh:
-                dl_url = fresh
         rec = downloads.get(dl_id)
         if rec is None:
             return
+        # Re-resolve from the movie page (stored CDN URLs carry expiring
+        # tokens) and only resume the partial if it's still the SAME file —
+        # appending a different encode would silently corrupt the movie.
+        dl_url, is_uhd, same_file = refresh_download_url(rec)
         if not dl_url:
             rec.update({"status": "error", "error": "Could not refresh download URL"})
             log_activity("download", title, "Retry failed: no download URL", "error")
@@ -1387,7 +1467,11 @@ def api_retry(dl_id):
         resume_from = 0
         fn = rec.get("filename", "")
         if fn and Path(fn).exists():
-            resume_from = Path(fn).stat().st_size
+            if same_file:
+                resume_from = Path(fn).stat().st_size
+            else:
+                log_activity("download", title,
+                             "Source file changed — restarting from 0", "info")
         run_download(dl_id, title, dl_url,
                      year=rec.get("year", ""), tmdb_id=rec.get("tmdb_id"),
                      resume_from=resume_from)
@@ -1435,7 +1519,7 @@ def api_cancel(dl_id):
 
 @app.route("/api/remove/<dl_id>", methods=["POST"])
 def api_remove(dl_id):
-    data        = flask_request.get_json(force=True) or {}
+    data        = flask_request.get_json(force=True, silent=True) or {}
     delete_file = data.get("delete_file", False)
     if dl_id not in downloads:
         return jsonify({"ok": False, "error": "Not found"}), 404
@@ -1736,19 +1820,36 @@ def api_show_delete():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+_image_cache: dict = {}
+
 @app.route("/api/proxy/image/<item_id>")
 def proxy_image(item_id):
-    """Proxy Jellyfin images so browser can access internal Docker URLs."""
-    # Try Primary first, then Thumb, then Backdrop
+    """Proxy Jellyfin images so browser can access internal Docker URLs.
+    Cached in-memory (1h hits, 5min misses) so library renders don't re-hit
+    Jellyfin for every poster and missing images don't stall for ~30s."""
+    hit = _image_cache.get(item_id)
+    if hit and hit[0] > time.time():
+        if hit[1] is None:
+            return Response(status=404)
+        return Response(hit[1], content_type=hit[2],
+                        headers={"Cache-Control": "public, max-age=3600"})
     for image_type in ["Primary", "Thumb", "Backdrop"]:
         try:
             url = f"{jellyfin.base}/Items/{item_id}/Images/{image_type}"
             params = {"maxHeight": "400", "api_key": Config.JELLYFIN_API_KEY}
             r = requests.get(url, params=params, timeout=10)
             if r.status_code == 200:
-                return Response(r.content, content_type=r.headers.get('Content-Type', 'image/jpeg'))
+                ctype = r.headers.get('Content-Type', 'image/jpeg')
+                if len(_image_cache) > 500:
+                    _image_cache.clear()
+                _image_cache[item_id] = (time.time() + 3600, r.content, ctype)
+                return Response(r.content, content_type=ctype,
+                                headers={"Cache-Control": "public, max-age=3600"})
         except Exception:
             continue
+    if len(_image_cache) > 500:
+        _image_cache.clear()
+    _image_cache[item_id] = (time.time() + 300, None, None)
     return Response(status=404)
 
 
@@ -1819,4 +1920,5 @@ if __name__ == "__main__":
     t = threading.Thread(target=watcher_loop, daemon=True)
     t.start()
     log.info("EinthuBot Web UI → http://0.0.0.0:%d", Config.WEB_PORT)
-    app.run(host="0.0.0.0", port=Config.WEB_PORT, debug=False)
+    from waitress import serve
+    serve(app, host="0.0.0.0", port=Config.WEB_PORT, threads=8)

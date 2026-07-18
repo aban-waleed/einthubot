@@ -130,14 +130,10 @@ window.init_home = async function() {
   } catch(e) { console.error(e); }
 };
 
-async function homeApprove(i, btn) {
+function homeApprove(i, btn) {
   var req = (window._homePending||[])[i];
   if (!req) return;
-  btn.disabled = true; btn.textContent = '⏳…';
-  try {
-    var d = await fetch('/api/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:req.id,title:req.title,year:req.year,original_title:req.original_title||''})}).then(r=>r.json());
-    if (d.ok) { showToast(`Searching for "${req.title}"…`,'info','Approved'); btn.textContent='⬇ Queued'; btn.style.opacity='0.5'; }
-    else { showToast(d.error||'Failed','error'); btn.disabled=false; btn.textContent='▶ Download'; }
-  } catch(e) { showToast('Failed','error'); btn.disabled=false; btn.textContent='▶ Download'; }
+  // Same preview → confirm modal as the Requests tab (shared in the shell)
+  window.startMatchFlow(req, btn, function(){ setTimeout(function(){ window.init_home && window.init_home(); }, 2000); });
 }
 </script>
