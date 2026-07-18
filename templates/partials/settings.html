@@ -358,6 +358,9 @@ var THEMES_META = {
   neon_rain:    { name:'Neon Rain',    accent:'#00f5ff', bg:'#030610', surf:'#080e1a', light:false, excl:true,  gradTo:'#7c3aed',  animated:true },
   lava_lamp:    { name:'Lava Lamp',    accent:'#d946ef', bg:'#06030a', surf:'#0e0614', light:false, excl:true,  gradTo:'#7c3aed',  animated:true },
   grid_pulse:   { name:'Grid Pulse',   accent:'#00ff88', bg:'#020a04', surf:'#060e08', light:false, excl:true,  gradTo:'#00cc44',  animated:true },
+  obsidian_royale: { name:'Obsidian Royale', accent:'#d4af37', bg:'#050308', surf:'#181024', light:false, excl:true, vip:true, gradTo:'#7c3aed', animated:true },
+  borealis_glass:  { name:'Borealis Glass',  accent:'#2dd4bf', bg:'#04060f', surf:'#0e1626', light:false, excl:true, vip:true, gradTo:'#818cf8', animated:true },
+  liquid_gold:     { name:'Liquid Gold',     accent:'#f5b942', bg:'#0a0703', surf:'#261a0c', light:false, excl:true, vip:true, gradTo:'#b45309', animated:true },
 };
 
 function buildThemeGrid() {
@@ -379,7 +382,7 @@ function buildThemeGrid() {
         <div class="tp-btn" style="background:${accentDisp};"></div>
       </div>
       <div class="theme-footer" style="background:${footBg};">
-        <span class="theme-name-label" style="color:${t.accent};">${t.name}${t.excl?`<span class="excl-badge" style="background:${accentDisp};color:#000;">⭐</span>`:''}
+        <span class="theme-name-label" style="color:${t.accent};">${t.name}${t.excl?`<span class="excl-badge" style="background:${accentDisp};color:#000;">${t.vip?'👑':'⭐'}</span>`:''}
         </span>
         <div class="theme-swatch" style="background:${accentDisp};"></div>
       </div>
