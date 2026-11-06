@@ -16,7 +16,7 @@ A self-hosted tool that integrates [Einthusan.tv](https://einthusan.tv) Premium 
 - ⬇️ **Downloads tab** — live progress bar, pause, resume, cancel with automatic file cleanup
 - 🎞️ **Library tab** — browse your Jellyfin **movies and TV shows** with TMDB posters, ratings, genres, cast and full detail views. Drill into shows → seasons → episodes, and delete from Jellyfin, disk, and Jellyseerr in one click
 - 📋 **Activity log** — full history of every search, match, download and Seerr event
-- ⚙️ **Settings tab** — edit all configuration from the browser (writes to `.env` and applies immediately), reveal/hide secrets, and pick from **21 themes** (13 standard + 8 animated exclusives)
+- ⚙️ **Settings tab** — edit all configuration from the browser (writes to `.env` and applies immediately), reveal/hide secrets, and pick from **23 themes** (12 standard + 11 animated exclusives)
 - 🔁 **Auto-sync with Jellyfin** — the watcher marks requests available in Jellyseerr once the movie appears in your Jellyfin library
 - 🧠 **Smart year-first matching** — prevents wrong movies (e.g. Don 1978 vs Don 2006)
 - 🎬 **TMDB integration** — automatic metadata lookup for proper Jellyfin folder naming (`Movie Title (Year) {tmdb-XXXXXXX}`)
@@ -213,7 +213,7 @@ You should see a green **Online · Premium** badge in the top right.
 | ⬇️ **Downloads** | Live progress bars, pause/resume/cancel, download history |
 | 🎞️ **Library** | Browse your Jellyfin **movies and TV shows** with TMDB posters. Open any title for full details — backdrop, cast, genres, overview. Expand shows into seasons and episodes. Delete from Jellyfin + disk + Seerr in one click |
 | 📋 **Activity** | Full log of every event |
-| ⚙️ **Settings** | Edit all `.env` configuration from the browser, reveal/hide secrets, and choose from 21 themes |
+| ⚙️ **Settings** | Edit all `.env` configuration from the browser, reveal/hide secrets, and choose from 23 themes |
 
 ---
 
@@ -245,7 +245,7 @@ A running log of every search, match, download and Jellyseerr event.
 ![Activity tab](docs/activity.png)
 
 ### Settings
-Edit all configuration in the browser, toggle to reveal secrets, and pick from 20 themes (13 standard + 7 animated exclusives).
+Edit all configuration in the browser, toggle to reveal secrets, and pick from 23 themes (12 standard + 11 animated exclusives).
 
 ![Settings tab](docs/settings.png)
 
@@ -290,7 +290,7 @@ einthubot/
 │       ├── downloads.html  # Live download progress
 │       ├── library.html    # Movies + TV shows
 │       ├── activity.html   # Event log
-│       └── settings.html   # Config editor + 20 themes
+│       └── settings.html   # Config editor + 23 themes
 └── logs/                   # Runtime logs (gitignored)
 ```
 
